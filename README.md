@@ -102,21 +102,20 @@ python scripts\acceptance.py                     # needs the backend running
 
 ## Deployment
 
-The backend and frontend are hosted separately.
+The application is hosted on one AWS EC2 instance (Ubuntu 24.04). Nginx serves the built frontend and
+passes `/api` to the backend, so both share one HTTPS origin. `deploy/aws/` holds the setup script, the
+systemd service, the Nginx site and step-by-step instructions (`deploy/aws/README.md`).
 
-**Backend (Oracle Cloud Always Free VM).** `deploy/oracle/` holds the setup script, the systemd service,
-the Nginx site and step-by-step instructions (`deploy/oracle/README.md`).
-
-- Runs as: systemd → Uvicorn (one worker) → FastAPI, behind Nginx on port 80
+- Runs as: systemd → Uvicorn (one worker) → FastAPI, behind Nginx with a Let's Encrypt certificate
 - Start: `uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8000 --workers 1`
 - Health check: `/api/health`
 - Environment (in `/etc/document-investigator.env`): `OPENROUTER_API_KEY`, `OPENROUTER_MODEL`,
-  `OPENROUTER_FALLBACK_MODELS`, `LLM_MODE=live`, `DATA_DIR`, and `ALLOWED_ORIGINS` set to the
-  frontend's origin
+  `OPENROUTER_FALLBACK_MODELS`, `LLM_MODE`, `DATA_DIR`
+- Frontend: `npm run build` with `VITE_API_BASE_URL` unset, copied to `/var/www/document-investigator`
+- Memory: the backend peaks at about 800 MB while reading a scanned page; use an instance with 2 GB or more
 
-**Frontend (Vercel).** Root directory `frontend`, build `npm run build`, output `dist`.
-
-- Environment: `VITE_API_BASE_URL` set to the backend's public URL (no secret belongs here)
+If the frontend is hosted on a different origin instead, set `VITE_API_BASE_URL` to the backend's URL at
+build time and `ALLOWED_ORIGINS` to the frontend's origin on the backend.
 
 ## Try the demo
 
