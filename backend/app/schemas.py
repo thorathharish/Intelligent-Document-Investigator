@@ -16,6 +16,11 @@ class InvestigationCreate(BaseModel):
     title: str | None = None
 
 
+class QuestionRequest(BaseModel):
+    question: str = ""
+    fresh: bool = False
+
+
 # --- Analyst output (LLD section 10.1). Lenient where safe. ---
 
 VALUE_TYPES = {"duration", "date", "money", "percent", "number", "boolean", "text", "none"}

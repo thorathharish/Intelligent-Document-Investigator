@@ -41,6 +41,18 @@ def passage_text(filename: str, section: str | None, text: str) -> str:
     return f"{filename} — {section or ''}\n{text}"
 
 
+def embed_query(text: str) -> np.ndarray | None:
+    with _lock:
+        model = _get_model()
+        if model is None:
+            return None
+        try:
+            return _normalise(next(iter(model.query_embed(text))))
+        except Exception as exc:
+            log_stage("embed", level="WARN", error=f"{type(exc).__name__}: {exc}"[:200])
+            return None
+
+
 def embed_passages(texts: list[str]) -> list[np.ndarray] | None:
     """Return one L2-normalised float32 vector per text, or None if the embedder is unavailable."""
     with _lock:

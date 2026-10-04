@@ -6,7 +6,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from . import db
-from .api import demo, documents, investigations
+from .api import demo, documents, investigations, questions
 from .config import settings
 from .logging_utils import log_stage
 
@@ -46,3 +46,4 @@ async def http_error(request: Request, exc: HTTPException):
 app.include_router(demo.router, prefix="/api")
 app.include_router(investigations.router, prefix="/api")
 app.include_router(documents.router, prefix="/api")
+app.include_router(questions.router, prefix="/api")

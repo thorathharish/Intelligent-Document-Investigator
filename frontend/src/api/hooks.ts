@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, postJson } from './client'
-import type { DocumentInfo, Investigation, UploadResult } from './types'
+import type { DocumentInfo, Investigation, RunResult, UploadResult } from './types'
 
 const IN_PROGRESS = new Set(['queued', 'extracting', 'indexing'])
 
@@ -20,6 +20,19 @@ export function useDocuments(id: string) {
     queryFn: () => api<DocumentInfo[]>(`/investigations/${id}/documents`),
     // poll once a second while any document is still being processed
     refetchInterval: (query) => (query.state.data?.some((d) => IN_PROGRESS.has(d.status)) ? 1000 : false),
+  })
+}
+
+export function useRuns(id: string) {
+  return useQuery({ queryKey: ['runs', id], queryFn: () => api<RunResult[]>(`/investigations/${id}/runs`) })
+}
+
+export function useAskQuestion(id: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (question: string) => postJson<RunResult>(`/investigations/${id}/questions`, { question }),
+    onSuccess: (run) =>
+      queryClient.setQueryData<RunResult[]>(['runs', id], (previous) => [...(previous ?? []), run]),
   })
 }
 
