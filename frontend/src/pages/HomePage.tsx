@@ -22,6 +22,8 @@ const DIFFERENTIATORS = [
   },
 ]
 
+const CORE_IDEA = ['Ask', 'Retrieve', 'Answer', 'Prove', 'Compare', 'Warn']
+
 const STEPS = [
   { title: 'Upload documents', text: 'PDF, Word, text, and scanned images.' },
   { title: 'Ask a question', text: 'Use natural language to investigate the documents.' },
@@ -173,7 +175,25 @@ export function HomePage() {
           <h2 id="how" className="font-serif text-2xl sm:text-3xl">
             How it works
           </h2>
-          <ol className="mt-6 grid gap-x-6 gap-y-5 sm:grid-cols-2 lg:grid-cols-4">
+          <p className="mt-3 text-base text-ink-soft sm:text-lg">
+            The core idea behind Document Investigator is very simple:
+          </p>
+          <ol
+            data-testid="core-idea"
+            className="mt-3 flex flex-wrap items-baseline gap-x-3 gap-y-1 font-serif text-2xl sm:text-3xl"
+          >
+            {CORE_IDEA.map((word, i) => (
+              <li key={word} className="flex items-baseline gap-x-3">
+                {i > 0 && (
+                  <span className="text-accent" aria-hidden>
+                    →
+                  </span>
+                )}
+                {word}
+              </li>
+            ))}
+          </ol>
+          <ol className="mt-8 grid gap-x-6 gap-y-5 sm:grid-cols-2 lg:grid-cols-4">
             {STEPS.map((step, i) => (
               <li key={step.title} className="border-t-2 border-ink pt-3">
                 <p className="font-serif text-2xl text-ink-soft">{String(i + 1).padStart(2, '0')}</p>
