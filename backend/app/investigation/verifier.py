@@ -17,6 +17,7 @@ TYPED = {"duration", "date", "money", "percent", "number", "boolean"}
 
 _CHAR_MAP = {"‘": "'", "’": "'", "“": '"', "”": '"', "–": "-", "—": "-", "‑": "-", "−": "-"}
 _ELLIPSIS = re.compile(r"\.{3,}|…")
+_DIGITS = re.compile(r"\d+")
 _SUPERSESSION_CUE = re.compile(r"\b(replac|amend|supersed|overrid)\w*", re.I)
 _EDGE = " \t\n\"'.…"
 
@@ -74,11 +75,21 @@ def find_quote(quote: str, chunk_text: str, is_ocr: bool) -> tuple[int, int] | N
 
     alignment = fuzz.partial_ratio_alignment(plain, haystack)
     if alignment and alignment.score >= (FUZZY_OCR if is_ocr else FUZZY_TEXT) and alignment.dest_end > alignment.dest_start:
-        return span(alignment.dest_start, alignment.dest_end)
+        # show whole words: widen the aligned span to word boundaries in the stored text
+        start, end = alignment.dest_start, alignment.dest_end
+        while start > 0 and haystack[start - 1].isalnum():
+            start -= 1
+        while end < len(haystack) and haystack[end].isalnum():
+            end += 1
+        # a fuzzy match may absorb small copying slips, never a different number
+        if _DIGITS.findall(plain) != _DIGITS.findall(haystack[start:end]):
+            return None
+        return span(start, end)
     return None
 
 
-def _ocr_quality(item: dict) -> str | None:
+def ocr_quality(item: dict) -> str | None:
+    """None for text extraction; 'good' or 'low' for OCR (LLD section 7.3: low is confidence < 0.80)."""
     if item["extraction_method"] != "ocr":
         return None
     confidence = item.get("ocr_confidence")
@@ -153,7 +164,7 @@ def _evidence(item: dict, quote: str) -> dict:
         "paragraph": item["paragraph"],
         "quote": quote,
         "extraction_method": item["extraction_method"],
-        "ocr_quality": _ocr_quality(item),
+        "ocr_quality": ocr_quality(item),
     }
 
 

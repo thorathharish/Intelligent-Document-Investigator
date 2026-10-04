@@ -2,10 +2,10 @@
 
 The evidence state and its reasons come from the uncertainty engine; nothing here asks the model.
 """
-from ..ingestion.ocr import OCR_LOW_THRESHOLD
 from ..retrieval import embedder
 from ..schemas import AnalystOutput
 from . import uncertainty
+from .verifier import ocr_quality
 
 MAX_SENTENCE_CHARS = 400
 RELATED_QUOTE_CHARS = 240
@@ -16,10 +16,6 @@ DEGRADED_HEADLINE = "Automatic analysis is unavailable right now. These are the 
 def related_passages(evidence: list[dict], limit: int) -> list[dict]:
     related = []
     for item in evidence[:limit]:
-        quality = None
-        if item["extraction_method"] == "ocr":
-            confidence = item.get("ocr_confidence")
-            quality = "low" if confidence is not None and confidence < OCR_LOW_THRESHOLD else "good"
         related.append(
             {
                 "chunk_id": item["chunk_id"],
@@ -30,7 +26,7 @@ def related_passages(evidence: list[dict], limit: int) -> list[dict]:
                 "paragraph": item["paragraph"],
                 "quote": item["text"][:RELATED_QUOTE_CHARS],
                 "extraction_method": item["extraction_method"],
-                "ocr_quality": quality,
+                "ocr_quality": ocr_quality(item),
             }
         )
     return related
