@@ -1,7 +1,8 @@
-import { BadgeCheck, FileSearch, ScanLine } from 'lucide-react'
+import { BadgeCheck, FileSearch, GitCompare, ScanLine } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import type { Claim, Evidence, RunResult } from '../api/types'
 import { displayName, fileType, hasPageImage, locationOf } from '../lib/format'
+import { ContradictionMap } from './ContradictionMap'
 import { PageViewer } from './PageViewer'
 
 interface CardProps {
@@ -125,13 +126,17 @@ function groupClaims(run: RunResult): { title: string | null; claims: Claim[] }[
 
 interface Props {
   run: RunResult | null
+  pending: boolean
   selectedClaimId: string | null
   onSelectClaim: (claimId: string) => void
 }
 
-export function EvidencePane({ run, selectedClaimId, onSelectClaim }: Props) {
+/** Evidence for the selected question only. Nothing is shown until a question has been asked. */
+export function EvidencePane({ run, pending, selectedClaimId, onSelectClaim }: Props) {
   const [viewing, setViewing] = useState<Evidence | null>(null)
   const groups = run ? groupClaims(run) : []
+  const conflicts = run?.aspects.filter((a) => a.status === 'conflict') ?? []
+  const claimById = new Map(run?.claims.map((c) => [c.id, c]) ?? [])
   const aspectLabel = new Map(run?.aspects.map((a) => [a.id, a.label]) ?? [])
 
   const stated = (claim: Claim) => {
@@ -153,12 +158,24 @@ export function EvidencePane({ run, selectedClaimId, onSelectClaim }: Props) {
             document text before it was shown.
           </>
         ) : (
-          'Each quote is found in the stored document text before it is shown.'
+          'The passages behind the selected answer, each checked against the stored document text.'
         )}
       </p>
 
       <div className="mt-3 min-h-0 flex-1 overflow-y-auto pr-1">
-        {!run && <p className="text-sm text-ink-soft">Ask a question to see the passages behind its answer.</p>}
+        {!run && pending && (
+          <p data-testid="evidence-pending" className="rounded-lg border border-dashed border-slate-300 p-4 text-sm text-ink-soft">
+            Looking for evidence in the documents…
+          </p>
+        )}
+        {!run && !pending && (
+          <div data-testid="evidence-empty" className="rounded-lg border border-dashed border-slate-300 p-4">
+            <p className="text-sm font-medium">No evidence selected yet.</p>
+            <p className="mt-1 text-sm text-ink-soft">
+              Ask a question to see evidence verified against the source documents.
+            </p>
+          </div>
+        )}
 
         {groups.map((group) => (
           <div key={group.title ?? 'all'} className="mb-4" data-testid="evidence-group">
@@ -197,6 +214,27 @@ export function EvidencePane({ run, selectedClaimId, onSelectClaim }: Props) {
 
         {run && run.claims.length === 0 && run.related.length === 0 && (
           <p className="text-sm text-ink-soft">There are no passages to show for this question.</p>
+        )}
+
+        {/* only for the selected question, and only when the backend reported a conflict for it */}
+        {run && conflicts.length > 0 && (
+          <div data-testid="contradiction-section" className="mt-2 border-t border-line pt-4">
+            <h2 className="flex items-center gap-1.5 text-sm font-semibold">
+              <GitCompare size={16} className="text-red-700" aria-hidden />
+              Contradiction
+            </h2>
+            <div className="mt-2 space-y-3">
+              {conflicts.map((aspect) => (
+                <ContradictionMap
+                  key={aspect.id}
+                  aspect={aspect}
+                  claims={claimById}
+                  selectedClaimId={selectedClaimId}
+                  onSelectClaim={onSelectClaim}
+                />
+              ))}
+            </div>
+          </div>
         )}
       </div>
 

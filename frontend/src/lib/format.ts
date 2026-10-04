@@ -41,6 +41,12 @@ export function hasPageImage(evidence: Evidence): boolean {
   return evidence.page != null && ['PDF', 'PNG', 'JPG', 'JPEG'].includes(fileType(evidence.document))
 }
 
+/** Headline for a conflicting topic; falls back when the topic has no label. */
+export function conflictHeadline(label: string): string {
+  const topic = label.trim()
+  return topic ? `Evidence disagrees on ${topic.toLowerCase()}` : 'The documents state different values'
+}
+
 export interface Contradiction {
   key: string
   label: string

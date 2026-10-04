@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import type { RunResult } from '../api/types'
-import { plural, timeOf } from '../lib/format'
+import { plural } from '../lib/format'
 import { StateTag } from './StateBadge'
 
 interface Props {
@@ -38,7 +38,6 @@ export function HistoryList({ runs, selectedRunId, onSelect }: Props) {
               >
                 <StateTag state={run.state} />
                 <span className="min-w-0 flex-1 truncate">{run.question}</span>
-                <span className="shrink-0 text-xs font-normal text-ink-soft">{timeOf(run.created_at)}</span>
               </button>
             </li>
           )

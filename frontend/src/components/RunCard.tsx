@@ -1,12 +1,13 @@
 import { FileCheck, TriangleAlert } from 'lucide-react'
 import type { RunResult } from '../api/types'
-import { displayName, locationOf, withDisplayNames } from '../lib/format'
-import { ContradictionMap } from './ContradictionMap'
+import { conflictHeadline, displayName, locationOf, withDisplayNames } from '../lib/format'
 import { STATES, StateBadge } from './StateBadge'
 import { WhyThisAnswer } from './WhyThisAnswer'
 
 interface Props {
   run: RunResult
+  /** true when the same question was asked again in this session */
+  repeated?: boolean
   selectedClaimId: string | null
   onSelectClaim: (claimId: string) => void
 }
@@ -24,7 +25,7 @@ const EDGE: Record<RunResult['state'], string> = {
 }
 
 /** The selected investigation: question, evidence state, answer, citations and the reasons behind the state. */
-export function RunCard({ run, selectedClaimId, onSelectClaim }: Props) {
+export function RunCard({ run, repeated = false, selectedClaimId, onSelectClaim }: Props) {
   const claimById = new Map(run.claims.map((c) => [c.id, c]))
   const conflicts = run.aspects.filter((a) => a.status === 'conflict')
   const filenames = [...new Set(run.claims.map((c) => c.evidence.document))]
@@ -41,9 +42,9 @@ export function RunCard({ run, selectedClaimId, onSelectClaim }: Props) {
         <StateBadge state={run.state} />
         <p className="text-sm text-ink-soft">{STATES[run.state].meaning}</p>
       </div>
-      {run.cached && (
+      {repeated && (
         <p data-testid="cached" className="mt-1.5 text-xs text-ink-soft">
-          Answered earlier in this investigation; shown from its history.
+          You asked this already; this is the same result.
         </p>
       )}
 
@@ -66,20 +67,13 @@ export function RunCard({ run, selectedClaimId, onSelectClaim }: Props) {
       )}
 
       {conflicts.map((aspect) => (
-        <ContradictionMap
-          key={aspect.id}
-          aspect={aspect}
-          claims={claimById}
-          selectedClaimId={selectedClaimId}
-          onSelectClaim={onSelectClaim}
-        />
+        <p key={aspect.id} data-testid="conflict-headline" className="mt-4 font-serif text-2xl leading-snug text-red-900">
+          {conflictHeadline(aspect.label)}
+        </p>
       ))}
 
       {run.answer.length > 0 && (
-        <div
-          className={`mt-4 space-y-2 font-serif leading-relaxed ${conflicts.length > 0 ? 'text-base text-ink-soft' : 'text-xl'}`}
-          data-testid="answer"
-        >
+        <div className="mt-4 space-y-2 font-serif text-xl leading-relaxed" data-testid="answer">
           {run.answer.map((sentence, i) => (
             <p key={i}>
               {withDisplayNames(sentence.text, filenames)}{' '}
@@ -108,6 +102,13 @@ export function RunCard({ run, selectedClaimId, onSelectClaim }: Props) {
             </p>
           ))}
         </div>
+      )}
+
+      {conflicts.length > 0 && (
+        <p className="mt-3 text-sm font-medium text-red-900">
+          No side has been chosen for you. The competing positions and their sources are compared under Verified
+          evidence.
+        </p>
       )}
 
       {run.warnings.length > 0 && (
