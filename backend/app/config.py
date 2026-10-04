@@ -52,6 +52,11 @@ class Settings:
     data_dir: Path = field(default_factory=lambda: _path("DATA_DIR", "./data"))
     enable_timeline: bool = field(default_factory=lambda: _bool("ENABLE_TIMELINE", False))
     enable_graph: bool = field(default_factory=lambda: _bool("ENABLE_GRAPH", False))
+    # Origins allowed to call the API from a browser (comma-separated). Empty for local development,
+    # where the frontend reaches the API through the dev-server proxy and no CORS is needed.
+    allowed_origins: list[str] = field(
+        default_factory=lambda: [origin.rstrip("/") for origin in _list("ALLOWED_ORIGINS")]
+    )
 
     @property
     def db_path(self) -> Path:

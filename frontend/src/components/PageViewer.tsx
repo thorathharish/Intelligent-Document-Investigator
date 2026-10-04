@@ -1,5 +1,6 @@
 import { X } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import { apiUrl } from '../api/client'
 import type { Evidence } from '../api/types'
 import { displayName, locationOf } from '../lib/format'
 
@@ -14,7 +15,7 @@ export function PageViewer({ evidence, onClose }: { evidence: Evidence; onClose:
   }, [onClose])
 
   const src =
-    `/api/documents/${evidence.document_id}/pages/${evidence.page}/image` +
+    apiUrl(`/documents/${evidence.document_id}/pages/${evidence.page}/image`) +
     (evidence.extraction_method === 'text' ? `?q=${encodeURIComponent(evidence.quote)}` : '')
 
   return (

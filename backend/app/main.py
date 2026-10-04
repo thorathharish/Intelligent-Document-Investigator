@@ -3,6 +3,7 @@ import time
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from . import db
@@ -19,6 +20,15 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Document Investigator", lifespan=lifespan)
+
+# Only the configured frontend origins may call the API from a browser; no wildcard.
+if settings.allowed_origins:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.allowed_origins,
+        allow_methods=["GET", "POST"],
+        allow_headers=["*"],
+    )
 
 
 @app.middleware("http")
