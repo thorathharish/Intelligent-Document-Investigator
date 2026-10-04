@@ -37,17 +37,22 @@ def _signature_ok(ext: str, data: bytes) -> bool:
     return False
 
 
-def validate_file(filename: str, data: bytes, max_bytes: int | None = None) -> tuple[str, str]:
-    """Return (ext, sha256) or raise ValidationError."""
+def validate_file(filename: str, data: bytes, max_bytes: int | None = None, size: int | None = None) -> tuple[str, str]:
+    """Return (ext, sha256) or raise ValidationError.
+
+    `size` is the file's size when it is known without reading it (an oversized upload is rejected
+    before its content is loaded); it defaults to len(data).
+    """
     ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
     if ext not in ALLOWED_EXTENSIONS:
         raise ValidationError("Unsupported file type")
     if ext == "jpeg":
         ext = "jpg"
     limit = settings.max_file_mb * 1024 * 1024 if max_bytes is None else max_bytes
-    if len(data) == 0:
+    size = len(data) if size is None else size
+    if size == 0:
         raise ValidationError("File is empty")
-    if len(data) > limit:
+    if size > limit:
         raise ValidationError(f"File is larger than {settings.max_file_mb} MB")
     if not _signature_ok(ext, data):
         raise ValidationError("File content does not match its extension")

@@ -101,6 +101,59 @@ def test_oversized_file():
         validate_file("notes.txt", b"x" * 100, max_bytes=10)
 
 
+def test_oversized_upload_is_rejected_without_being_read():
+    from app.api.documents import read_capped
+
+    class Unreadable:
+        def read(self, *args):
+            raise AssertionError("an oversized file must not be read into memory")
+
+    class Recording:
+        def __init__(self, data):
+            self.data, self.asked = data, None
+
+        def read(self, n=-1):
+            self.asked = n
+            return self.data[:n]
+
+    class Upload:
+        def __init__(self, filename, size, file):
+            self.filename, self.size, self.file = filename, size, file
+
+    limit = 20 * 1024 * 1024
+    name, data, size = read_capped(Upload("huge.pdf", 5 * 1024**3, Unreadable()), limit)
+    assert (name, data, size) == ("huge.pdf", b"", 5 * 1024**3)
+    with pytest.raises(ValidationError, match="larger"):
+        validate_file(name, data, size=size)
+
+    # size unknown: never more than limit + 1 bytes are read, which is enough to see it is too large
+    source = Recording(b"x" * 64)
+    name, data, size = read_capped(Upload("notes.txt", None, source), 16)
+    assert source.asked == 17 and size == 17
+    with pytest.raises(ValidationError, match="larger"):
+        validate_file(name, data, max_bytes=16, size=size)
+
+    # a normal file is read whole and validated as before
+    name, data, size = read_capped(Upload("memo.txt", len(TXT), Recording(TXT)), limit)
+    assert data == TXT and validate_file(name, data, size=size)[0] == "txt"
+
+
+def test_oversized_file_in_an_upload_does_not_block_the_others(client, monkeypatch):
+    from app.config import settings
+
+    monkeypatch.setattr("app.api.documents.settings", settings)
+    original = settings.max_file_mb
+    object.__setattr__(settings, "max_file_mb", 1)
+    try:
+        inv = _new_investigation(client)
+        body = _upload(client, inv, [("big.txt", b"word " * 300_000), ("memo.txt", TXT)]).json()
+    finally:
+        object.__setattr__(settings, "max_file_mb", original)
+    assert body["rejected"] == [{"filename": "big.txt", "reason": "File is larger than 1 MB"}]
+    assert [d["filename"] for d in body["accepted"]] == ["memo.txt"]
+    assert _documents(client, inv)["memo.txt"]["status"] == "ready"
+
+
 def test_mismatched_signature():
     with pytest.raises(ValidationError, match="does not match"):
         validate_file("fake.pdf", b"this is plain text, not a pdf")

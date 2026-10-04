@@ -24,17 +24,36 @@ def upload_documents(
         raise api_error(400, "no_files", "No files were uploaded")
     if len(files) > settings.max_files:
         raise api_error(400, "too_many_files", f"Upload at most {settings.max_files} files at a time")
-    return store_files(investigation_id, [(upload.filename or "unnamed", upload.file.read()) for upload in files], background)
+    limit = settings.max_file_mb * 1024 * 1024
+    return store_files(investigation_id, [read_capped(upload, limit) for upload in files], background)
 
 
-def store_files(investigation_id: str, files: list[tuple[str, bytes]], background: BackgroundTasks) -> dict:
-    """Validate, store and queue files for processing. Shared by upload and the demo seed."""
+def read_capped(upload: UploadFile, limit: int) -> tuple[str, bytes, int]:
+    """Return (filename, data, size) without ever holding an oversized file in memory.
+
+    A file whose declared size is over the limit is not read at all; otherwise at most limit + 1
+    bytes are read, which is enough for validation to see that it is too large.
+    """
+    name = upload.filename or "unnamed"
+    if upload.size is not None and upload.size > limit:
+        return name, b"", upload.size
+    data = upload.file.read(limit + 1)
+    return name, data, len(data)
+
+
+def store_files(investigation_id: str, files: list[tuple], background: BackgroundTasks) -> dict:
+    """Validate, store and queue files for processing. Shared by upload and the demo seed.
+
+    Each entry is (filename, data) or (filename, data, size) when the size was checked before reading.
+    """
     settings.uploads_dir.mkdir(parents=True, exist_ok=True)
     accepted_ids, rejected = [], []
-    for name, data in files:
+    for entry in files:
+        name, data = entry[0], entry[1]
+        size = entry[2] if len(entry) > 2 else len(data)
         filename = name.replace("\\", "/").rsplit("/", 1)[-1]
         try:
-            ext, sha256 = validate_file(filename, data)
+            ext, sha256 = validate_file(filename, data, size=size)
         except ValidationError as exc:
             rejected.append({"filename": filename, "reason": str(exc)})
             continue
