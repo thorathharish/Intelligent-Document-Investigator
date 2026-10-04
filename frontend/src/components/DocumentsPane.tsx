@@ -117,15 +117,16 @@ export function DocumentsPane({ investigationId }: { investigationId: string }) 
           send(e.dataTransfer.files)
         }}
         onClick={() => input.current?.click()}
-        className={`mt-2 rounded-lg border border-dashed px-3 py-3 text-center text-sm transition-colors ${
+        className={`mt-2 rounded-lg border-2 border-dashed px-4 py-6 text-center transition-colors ${
           dragging ? 'border-accent bg-blue-50' : 'border-slate-300 bg-white hover:border-accent'
         }`}
       >
-        <span className="inline-flex items-center gap-2 font-medium">
-          <Upload size={15} aria-hidden />
+        <span className="inline-flex items-center gap-2 text-base font-semibold">
+          <Upload size={20} aria-hidden />
           {upload.isPending ? 'Uploading…' : 'Add documents'}
         </span>
-        <span className="mt-0.5 block text-xs text-ink-soft">PDF, Word, text or scanned images</span>
+        <span className="mt-1.5 block text-sm text-ink-soft">PDF, Word, text or scanned images</span>
+        <span className="mt-0.5 block text-xs text-ink-soft">Drop files here or click to choose</span>
       </button>
       <input
         ref={input}
