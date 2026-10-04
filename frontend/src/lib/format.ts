@@ -9,13 +9,27 @@ export function fileType(filename: string): string {
   return ext.toUpperCase()
 }
 
-/** "Page 2, 4.2 Payment Terms" — or the paragraph number when the format has no pages. */
+/** "Master_Services_Agreement.pdf" -> "Master Services Agreement". Display only; the stored name is unchanged. */
+export function displayName(filename: string): string {
+  return filename
+    .replace(/\.[^.]+$/, '')
+    .replace(/_+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+/** Swap stored file names for their readable form inside a sentence. */
+export function withDisplayNames(text: string, filenames: string[]): string {
+  return filenames.reduce((out, name) => out.split(name).join(displayName(name)), text)
+}
+
+/** "Page 2 · 4.2 Payment Terms" — or the paragraph number when the format has no pages. */
 export function locationOf(evidence: Evidence): string {
   const parts: string[] = []
   if (evidence.page != null) parts.push(`Page ${evidence.page}`)
   if (evidence.section) parts.push(evidence.section)
   if (parts.length === 0) parts.push(`Paragraph ${evidence.paragraph}`)
-  return parts.join(', ')
+  return parts.join(' · ')
 }
 
 export function timeOf(iso: string): string {

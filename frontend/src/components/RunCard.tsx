@@ -1,56 +1,51 @@
-import { TriangleAlert } from 'lucide-react'
+import { FileCheck, TriangleAlert } from 'lucide-react'
 import type { RunResult } from '../api/types'
-import { timeOf } from '../lib/format'
+import { displayName, locationOf, withDisplayNames } from '../lib/format'
 import { ContradictionMap } from './ContradictionMap'
 import { STATES, StateBadge } from './StateBadge'
 import { WhyThisAnswer } from './WhyThisAnswer'
 
 interface Props {
   run: RunResult
-  selected: boolean
   selectedClaimId: string | null
-  onSelect: () => void
   onSelectClaim: (claimId: string) => void
 }
 
 const NO_ANSWER = "I couldn't find verified evidence sufficient to answer this question."
-const EVIDENCE_ONLY = 'Evidence is available, but automatic analysis was unavailable. The closest passages are shown as evidence.'
+const EVIDENCE_ONLY =
+  'Evidence is available, but automatic analysis was unavailable. The closest passages are shown as evidence, not as an answer.'
 
-export function RunCard({ run, selected, selectedClaimId, onSelect, onSelectClaim }: Props) {
-  // earlier questions stay in the list as one-line history rows
-  if (!selected) {
-    return (
-      <button
-        type="button"
-        data-testid="run-card"
-        data-collapsed="true"
-        onClick={onSelect}
-        className="flex w-full items-center gap-3 rounded-lg border border-line bg-white px-4 py-2.5 text-left hover:border-accent"
-      >
-        <span className="min-w-0 flex-1 truncate text-sm" data-testid="run-question">
-          {run.question}
-        </span>
-        <span className="shrink-0 text-xs text-ink-soft">{timeOf(run.created_at)}</span>
-        <StateBadge state={run.state} compact />
-      </button>
-    )
-  }
+const EDGE: Record<RunResult['state'], string> = {
+  HIGH: 'border-t-emerald-600',
+  MEDIUM: 'border-t-sky-600',
+  LOW: 'border-t-amber-500',
+  CONFLICT: 'border-t-red-600',
+  INSUFFICIENT: 'border-t-slate-400',
+}
 
+/** The selected investigation: question, evidence state, answer, citations and the reasons behind the state. */
+export function RunCard({ run, selectedClaimId, onSelectClaim }: Props) {
   const claimById = new Map(run.claims.map((c) => [c.id, c]))
   const conflicts = run.aspects.filter((a) => a.status === 'conflict')
+  const filenames = [...new Set(run.claims.map((c) => c.evidence.document))]
 
   return (
-    <article data-testid="run-card" className="rounded-lg border border-slate-300 bg-white p-5 shadow-sm">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <h3 className="min-w-0 flex-1 text-base font-semibold" data-testid="run-question">
-          {run.question}
-        </h3>
+    <article
+      data-testid="run-card"
+      className={`rounded-lg border border-t-4 border-slate-300 bg-white p-6 shadow-sm ${EDGE[run.state]}`}
+    >
+      <h3 className="text-lg font-semibold leading-snug" data-testid="run-question">
+        {run.question}
+      </h3>
+      <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1.5">
         <StateBadge state={run.state} />
+        <p className="text-sm text-ink-soft">{STATES[run.state].meaning}</p>
       </div>
-      <p className="mt-1 text-xs text-ink-soft">
-        {STATES[run.state].meaning}
-        {run.cached && <span data-testid="cached"> Answered earlier; shown from this investigation's history.</span>}
-      </p>
+      {run.cached && (
+        <p data-testid="cached" className="mt-1.5 text-xs text-ink-soft">
+          Answered earlier in this investigation; shown from its history.
+        </p>
+      )}
 
       {run.degraded && (
         <p data-testid="degraded" className="mt-4 flex gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
@@ -60,9 +55,14 @@ export function RunCard({ run, selected, selectedClaimId, onSelect, onSelectClai
       )}
 
       {run.state === 'INSUFFICIENT' && (
-        <p data-testid="no-answer" className="mt-4 rounded-md bg-slate-100 p-3 font-serif text-lg text-slate-800">
-          {NO_ANSWER}
-        </p>
+        <div data-testid="no-answer" className="mt-4 rounded-md bg-slate-100 p-4">
+          <p className="font-serif text-xl text-slate-800">{NO_ANSWER}</p>
+          <p className="mt-1 text-sm text-ink-soft">
+            {run.related.length > 0
+              ? 'The closest passages are listed under Verified evidence so you can check for yourself.'
+              : 'Nothing in the documents is close to this question.'}
+          </p>
+        </div>
       )}
 
       {conflicts.map((aspect) => (
@@ -76,24 +76,35 @@ export function RunCard({ run, selected, selectedClaimId, onSelect, onSelectClai
       ))}
 
       {run.answer.length > 0 && (
-        <div className="mt-4 space-y-2 font-serif text-lg leading-relaxed" data-testid="answer">
+        <div
+          className={`mt-4 space-y-2 font-serif leading-relaxed ${conflicts.length > 0 ? 'text-base text-ink-soft' : 'text-xl'}`}
+          data-testid="answer"
+        >
           {run.answer.map((sentence, i) => (
             <p key={i}>
-              {sentence.text}{' '}
-              {sentence.claim_ids.map((claimId) => (
-                <button
-                  key={claimId}
-                  type="button"
-                  data-testid="citation"
-                  title="Show the verified evidence"
-                  onClick={() => onSelectClaim(claimId)}
-                  className={`mx-0.5 inline-flex h-5 min-w-5 items-center justify-center rounded px-1 align-middle font-sans text-xs font-semibold transition-colors ${
-                    selectedClaimId === claimId ? 'bg-ink text-white' : 'bg-blue-100 text-accent hover:bg-blue-200'
-                  }`}
-                >
-                  {claimById.get(claimId)?.citation}
-                </button>
-              ))}
+              {withDisplayNames(sentence.text, filenames)}{' '}
+              {sentence.claim_ids.map((claimId) => {
+                const claim = claimById.get(claimId)
+                if (!claim) return null
+                const active = selectedClaimId === claimId
+                return (
+                  <button
+                    key={claimId}
+                    type="button"
+                    data-testid="citation"
+                    title={`Verified evidence ${claim.citation}: ${displayName(claim.evidence.document)}, ${locationOf(claim.evidence)}`}
+                    onClick={() => onSelectClaim(claimId)}
+                    className={`mx-0.5 inline-flex h-6 items-center gap-1 rounded-md border px-1.5 align-middle font-sans text-xs font-semibold transition-colors ${
+                      active
+                        ? 'border-ink bg-ink text-white'
+                        : 'border-blue-200 bg-blue-50 text-accent hover:border-accent'
+                    }`}
+                  >
+                    <FileCheck size={12} aria-hidden />
+                    {claim.citation}
+                  </button>
+                )
+              })}
             </p>
           ))}
         </div>
@@ -109,7 +120,7 @@ export function RunCard({ run, selected, selectedClaimId, onSelect, onSelectClai
         </ul>
       )}
 
-      <WhyThisAnswer run={run} />
+      <WhyThisAnswer key={run.run_id} run={run} />
     </article>
   )
 }

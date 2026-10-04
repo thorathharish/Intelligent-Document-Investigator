@@ -1,13 +1,13 @@
 import { BadgeCheck, FileSearch, ScanLine } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import type { Claim, Evidence, RunResult } from '../api/types'
-import { hasPageImage, locationOf } from '../lib/format'
+import { displayName, fileType, hasPageImage, locationOf } from '../lib/format'
 import { PageViewer } from './PageViewer'
 
 interface CardProps {
   evidence: Evidence
   number?: number
-  stated?: string
+  stated?: { label: string; value: string | null }
   inferred?: boolean
   active?: boolean
   onSelect?: () => void
@@ -30,15 +30,21 @@ function EvidenceCard({ evidence, number, stated, inferred, active, onSelect, on
         active ? 'border-ink ring-2 ring-ink/15' : 'border-line'
       } ${onSelect ? 'cursor-pointer hover:border-accent' : ''}`}
     >
+      {/* 1 source, 2 location */}
       <div className="flex items-start gap-2">
         {number != null && (
-          <span className="flex h-5 min-w-5 items-center justify-center rounded bg-blue-100 px-1 text-xs font-semibold text-accent">
+          <span
+            className={`flex h-6 min-w-6 items-center justify-center rounded-md px-1 text-xs font-semibold ${
+              active ? 'bg-ink text-white' : 'bg-blue-50 text-accent'
+            }`}
+          >
             {number}
           </span>
         )}
         <div className="min-w-0 flex-1">
-          <p className="truncate font-medium" data-testid="evidence-document" title={evidence.document}>
-            {evidence.document}
+          <p className="font-semibold leading-snug" data-testid="evidence-document" title={evidence.document}>
+            {displayName(evidence.document)}
+            <span className="ml-1.5 align-middle text-[11px] font-medium text-ink-soft">{fileType(evidence.document)}</span>
           </p>
           <p className="text-xs text-ink-soft" data-testid="evidence-location">
             {locationOf(evidence)}
@@ -46,40 +52,52 @@ function EvidenceCard({ evidence, number, stated, inferred, active, onSelect, on
         </div>
       </div>
 
-      <p className="mt-2.5">
+      {/* 3 verified quote */}
+      <p className="mt-3 text-[15px]">
         <span className="verified-quote" data-testid="evidence-quote">
           {evidence.quote}
         </span>
       </p>
 
+      {/* 4 what the passage states */}
       {stated && (
-        <p className="mt-2 text-xs text-ink-soft" data-testid="evidence-stated">
-          {stated}
-          {inferred && ' (inferred, not stated directly)'}
-        </p>
+        <div className="mt-3 border-l-2 border-line pl-2.5" data-testid="evidence-stated">
+          <p className="text-xs text-ink-soft">{stated.label}</p>
+          {stated.value && (
+            <p className="text-sm font-semibold">
+              {stated.value}
+              {inferred && <span className="font-normal text-ink-soft"> (inferred, not stated directly)</span>}
+            </p>
+          )}
+        </div>
       )}
 
-      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-        {evidence.extraction_method === 'ocr' && (
-          <span data-testid="evidence-ocr" className="inline-flex items-center gap-1 text-amber-800">
-            <ScanLine size={12} aria-hidden />
-            Read from a scanned image{evidence.ocr_quality === 'low' && ' (low quality)'}
-          </span>
-        )}
-        {hasPageImage(evidence) && (
-          <button
-            type="button"
-            data-testid="view-page"
-            onClick={(e) => {
-              e.stopPropagation()
-              onViewPage(evidence)
-            }}
-            className="inline-flex items-center gap-1 font-medium text-accent hover:underline"
-          >
-            <FileSearch size={12} aria-hidden /> View page
-          </button>
-        )}
-      </div>
+      {/* 5 action */}
+      {(evidence.extraction_method === 'ocr' || hasPageImage(evidence)) && (
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs">
+          {evidence.extraction_method === 'ocr' ? (
+            <span data-testid="evidence-ocr" className="inline-flex items-center gap-1 text-amber-800">
+              <ScanLine size={12} aria-hidden />
+              Read from a scanned image{evidence.ocr_quality === 'low' && ' (low quality)'}
+            </span>
+          ) : (
+            <span />
+          )}
+          {hasPageImage(evidence) && (
+            <button
+              type="button"
+              data-testid="view-page"
+              onClick={(e) => {
+                e.stopPropagation()
+                onViewPage(evidence)
+              }}
+              className="inline-flex items-center gap-1 rounded-md border border-line px-2 py-1 font-medium text-accent hover:border-accent"
+            >
+              <FileSearch size={12} aria-hidden /> View page
+            </button>
+          )}
+        </div>
+      )}
     </li>
   )
 }
@@ -97,7 +115,7 @@ function groupClaims(run: RunResult): { title: string | null; claims: Claim[] }[
     for (const position of aspect.positions) {
       const claims = position.claim_ids.map((id) => byId.get(id)).filter((c): c is Claim => !!c)
       claims.forEach((c) => used.add(c.id))
-      groups.push({ title: `${aspect.label}: ${position.display}`, claims })
+      groups.push({ title: aspect.label.trim() ? `${aspect.label}: ${position.display}` : position.display, claims })
     }
   }
   const rest = run.claims.filter((c) => !used.has(c.id))
@@ -117,9 +135,9 @@ export function EvidencePane({ run, selectedClaimId, onSelectClaim }: Props) {
   const aspectLabel = new Map(run?.aspects.map((a) => [a.id, a.label]) ?? [])
 
   const stated = (claim: Claim) => {
-    const label = aspectLabel.get(claim.aspect_id)
+    const label = aspectLabel.get(claim.aspect_id)?.trim() || (claim.position_key ? 'Stated value' : '')
     if (!label) return undefined
-    return claim.position_key ? `${label}: ${claim.value}` : label
+    return { label, value: claim.position_key ? claim.value : null }
   }
 
   return (
@@ -129,7 +147,14 @@ export function EvidencePane({ run, selectedClaimId, onSelectClaim }: Props) {
         Verified evidence
       </h2>
       <p className="mt-0.5 text-xs text-ink-soft">
-        Each quote below was found in the stored document text before it was shown.
+        {run ? (
+          <>
+            For <span className="font-medium text-ink">“{run.question}”</span>. Each quote was found in the stored
+            document text before it was shown.
+          </>
+        ) : (
+          'Each quote is found in the stored document text before it is shown.'
+        )}
       </p>
 
       <div className="mt-3 min-h-0 flex-1 overflow-y-auto pr-1">

@@ -1,4 +1,4 @@
-import { LoaderCircle } from 'lucide-react'
+import { FileText, GitCompare, LoaderCircle, MessageSquareText } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useAskQuestion, useDocuments, useInvestigation, useRuns } from '../api/hooks'
@@ -6,6 +6,7 @@ import type { ApiError } from '../api/types'
 import { ContradictionList } from '../components/ContradictionList'
 import { DocumentsPane } from '../components/DocumentsPane'
 import { EvidencePane } from '../components/EvidencePane'
+import { HistoryList } from '../components/HistoryList'
 import { QuestionBar } from '../components/QuestionBar'
 import { RunCard } from '../components/RunCard'
 import { contradictionsOf, plural } from '../lib/format'
@@ -21,16 +22,17 @@ export function WorkspacePage() {
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null)
   const [selectedClaimId, setSelectedClaimId] = useState<string | null>(null)
   const [tab, setTab] = useState<Tab>('questions')
-  const bottom = useRef<HTMLDivElement>(null)
+  const scroller = useRef<HTMLDivElement>(null)
 
   const allRuns = useMemo(() => runs.data ?? [], [runs.data])
   const contradictions = useMemo(() => contradictionsOf(allRuns), [allRuns])
   const selectedRun = allRuns.find((r) => r.run_id === selectedRunId) ?? allRuns[allRuns.length - 1] ?? null
-  const hasReadyDocument = documents.data?.some((d) => d.status === 'ready') ?? false
+  const readyDocuments = documents.data?.filter((d) => d.status === 'ready').length ?? 0
 
+  // a new question or selection brings the history strip and the top of the result back into view
   useEffect(() => {
-    if (ask.isPending) bottom.current?.scrollIntoView({ block: 'end', behavior: 'smooth' })
-  }, [ask.isPending])
+    scroller.current?.scrollTo({ top: 0 })
+  }, [ask.isPending, selectedRun?.run_id])
 
   if (investigation.isError) {
     return (
@@ -64,6 +66,7 @@ export function WorkspacePage() {
     `border-b-2 px-1 pb-2 text-sm font-semibold ${
       tab === name ? 'border-ink text-ink' : 'border-transparent text-ink-soft hover:text-ink'
     }`
+  const metric = 'inline-flex items-center gap-1.5 rounded-md border border-line bg-paper px-2.5 py-1.5 text-xs font-medium'
 
   return (
     <div className="flex h-screen flex-col">
@@ -74,19 +77,36 @@ export function WorkspacePage() {
             {investigation.data?.title ?? 'Loading…'}
           </h1>
         </div>
-        <div className="flex shrink-0 items-center gap-4 text-xs text-ink-soft">
-          <span>{plural(documents.data?.length ?? 0, 'document')}</span>
-          <span>{plural(allRuns.length, 'question')}</span>
-          <span className={contradictions.length > 0 ? 'font-semibold text-red-800' : ''}>
-            {plural(contradictions.length, 'conflict')} found
+        <div className="flex shrink-0 items-center gap-2" data-testid="metrics">
+          <span className={metric}>
+            <FileText size={13} aria-hidden /> {plural(documents.data?.length ?? 0, 'document')}
           </span>
-          <Link to="/" className="rounded-lg border border-line px-3 py-1.5 font-medium text-ink hover:border-accent">
+          <span className={metric}>
+            <MessageSquareText size={13} aria-hidden /> {plural(allRuns.length, 'question')}
+          </span>
+          <button
+            type="button"
+            data-testid="conflict-metric"
+            onClick={() => setTab('contradictions')}
+            title="Show every conflict found in this investigation"
+            className={
+              contradictions.length > 0
+                ? 'inline-flex items-center gap-1.5 rounded-md border border-red-300 bg-red-50 px-2.5 py-1.5 text-xs font-semibold text-red-900 hover:border-red-500'
+                : `${metric} text-ink-soft`
+            }
+          >
+            <GitCompare size={13} aria-hidden /> {plural(contradictions.length, 'conflict')} detected
+          </button>
+          <Link
+            to="/"
+            className="ml-2 rounded-md border border-slate-300 px-3 py-1.5 text-xs font-semibold hover:border-accent"
+          >
             Switch case
           </Link>
         </div>
       </header>
 
-      <div className="grid min-h-0 flex-1 grid-cols-[280px_minmax(0,1fr)_400px] max-[1100px]:grid-cols-[240px_minmax(0,1fr)] max-[1100px]:grid-rows-[minmax(0,1fr)_minmax(0,40%)]">
+      <div className="grid min-h-0 flex-1 grid-cols-[272px_minmax(0,1fr)_392px] max-[1100px]:grid-cols-[240px_minmax(0,1fr)] max-[1100px]:grid-rows-[minmax(0,1fr)_minmax(0,40%)]">
         <aside className="min-h-0 border-r border-line bg-white p-4 max-[1100px]:row-span-2">
           <DocumentsPane investigationId={investigationId} />
         </aside>
@@ -108,50 +128,55 @@ export function WorkspacePage() {
             </button>
           </div>
 
-          <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-5 py-4">
+          <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
             {tab === 'contradictions' && <ContradictionList contradictions={contradictions} onOpen={selectRun} />}
 
             {tab === 'questions' && (
-              <>
+              <div className="space-y-4">
                 {runs.isLoading && <p className="text-sm text-ink-soft">Loading earlier questions…</p>}
                 {runs.isError && <p className="text-sm text-red-800">Earlier questions could not be loaded.</p>}
                 {runs.isSuccess && allRuns.length === 0 && !ask.isPending && (
                   <div data-testid="empty-investigation" className="rounded-lg border border-dashed border-slate-300 p-6 text-sm text-ink-soft">
-                    {hasReadyDocument
+                    {readyDocuments > 0
                       ? 'Ask a question below. The answer appears here with its evidence state, and the passages behind it appear on the right.'
                       : 'Add documents on the left. Questions can be asked as soon as one is ready.'}
                   </div>
                 )}
-                {allRuns.map((run) => (
-                  <RunCard
-                    key={run.run_id}
-                    run={run}
-                    selected={run.run_id === selectedRun?.run_id && !ask.isPending}
-                    selectedClaimId={selectedClaimId}
-                    onSelect={() => selectRun(run.run_id)}
-                    onSelectClaim={setSelectedClaimId}
+
+                {allRuns.length > 1 && (
+                  <HistoryList
+                    runs={allRuns}
+                    selectedRunId={ask.isPending ? null : (selectedRun?.run_id ?? null)}
+                    onSelect={selectRun}
                   />
-                ))}
-                {ask.isPending && (
-                  <div data-testid="pending" className="rounded-lg border border-slate-300 bg-white p-5">
-                    <p className="text-base font-semibold">{ask.variables}</p>
-                    <p className="mt-2 flex items-center gap-2 text-sm text-ink-soft">
-                      <LoaderCircle size={16} className="animate-spin" aria-hidden />
-                      Retrieving evidence, checking quotes and comparing documents…
-                    </p>
-                  </div>
                 )}
+
+                <div>
+                  {ask.isPending ? (
+                    <div data-testid="pending" className="rounded-lg border border-t-4 border-slate-300 bg-white p-6">
+                      <p className="text-lg font-semibold">{ask.variables}</p>
+                      <p className="mt-3 flex items-center gap-2 text-sm text-ink-soft">
+                        <LoaderCircle size={16} className="animate-spin" aria-hidden />
+                        Retrieving evidence, checking quotes and comparing documents…
+                      </p>
+                    </div>
+                  ) : (
+                    selectedRun && (
+                      <RunCard run={selectedRun} selectedClaimId={selectedClaimId} onSelectClaim={setSelectedClaimId} />
+                    )
+                  )}
+                </div>
+
                 {ask.isError && (
                   <p className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-900">
                     The question could not be investigated: {(ask.error as unknown as ApiError).message}
                   </p>
                 )}
-                <div ref={bottom} />
-              </>
+              </div>
             )}
           </div>
 
-          <QuestionBar disabled={!hasReadyDocument} pending={ask.isPending} onAsk={onAsk} />
+          <QuestionBar readyDocuments={readyDocuments} pending={ask.isPending} onAsk={onAsk} />
         </section>
 
         <aside className="min-h-0 border-l border-line p-4 max-[1100px]:border-l-0 max-[1100px]:border-t">

@@ -1,7 +1,7 @@
 import { X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import type { Evidence } from '../api/types'
-import { locationOf } from '../lib/format'
+import { displayName, locationOf } from '../lib/format'
 
 /** The source page as stored, with the verified quote highlighted when the page has a text layer. */
 export function PageViewer({ evidence, onClose }: { evidence: Evidence; onClose: () => void }) {
@@ -27,16 +27,28 @@ export function PageViewer({ evidence, onClose }: { evidence: Evidence; onClose:
       className="fixed inset-0 z-20 flex items-center justify-center bg-ink/60 p-6"
     >
       <div onClick={(e) => e.stopPropagation()} className="flex max-h-full w-full max-w-3xl flex-col rounded-lg bg-white shadow-xl">
-        <div className="flex items-center justify-between border-b border-line px-4 py-3">
+        <div className="flex items-center justify-between gap-4 border-b border-line px-5 py-3.5">
           <div className="min-w-0">
-            <p className="truncate text-sm font-semibold">{evidence.document}</p>
-            <p className="text-xs text-ink-soft">
-              {locationOf(evidence)}
-              {evidence.extraction_method === 'ocr' ? ', scanned image' : ', verified quote highlighted'}
+            <p className="truncate text-base font-semibold" title={evidence.document}>
+              {displayName(evidence.document)}
+            </p>
+            <p className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-ink-soft">
+              <span>{locationOf(evidence)}</span>
+              {evidence.extraction_method === 'ocr' ? (
+                <span className="rounded bg-amber-100 px-1.5 py-0.5 text-amber-900">
+                  Scanned image, shown as uploaded
+                </span>
+              ) : (
+                <span className="rounded bg-marker px-1.5 py-0.5 text-ink">Verified quote highlighted</span>
+              )}
             </p>
           </div>
-          <button type="button" onClick={onClose} aria-label="Close" className="rounded p-1 hover:bg-paper">
-            <X size={18} />
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex shrink-0 items-center gap-1 rounded-md border border-line px-2.5 py-1.5 text-sm font-medium hover:border-accent"
+          >
+            <X size={16} aria-hidden /> Close
           </button>
         </div>
         <div className="min-h-[240px] overflow-auto bg-paper p-4">

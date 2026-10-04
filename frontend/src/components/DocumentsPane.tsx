@@ -2,7 +2,7 @@ import { FileText, ScanLine, Upload } from 'lucide-react'
 import { useRef, useState } from 'react'
 import { useDocuments, useUploadDocuments } from '../api/hooks'
 import type { ApiError, DocumentInfo, DocumentStatus } from '../api/types'
-import { fileType, plural } from '../lib/format'
+import { displayName, fileType, plural } from '../lib/format'
 
 const STATUS: Record<DocumentStatus, { label: string; style: string }> = {
   queued: { label: 'Queued', style: 'bg-slate-100 text-slate-700' },
@@ -26,11 +26,11 @@ function DocumentRow({ doc }: { doc: DocumentInfo }) {
       <div className="flex items-start gap-2">
         <FileText size={16} className="mt-0.5 shrink-0 text-ink-soft" aria-hidden />
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium" title={doc.filename}>
-            {doc.filename}
+          <p className="text-sm font-medium leading-snug" title={doc.filename}>
+            {displayName(doc.filename)}
           </p>
           <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-ink-soft">
-            <span>{details.join(', ')}</span>
+            <span>{details.join(' · ')}</span>
             {scanned && (
               <span className="inline-flex items-center gap-1 text-amber-800" title="Text was read from an image by OCR">
                 <ScanLine size={12} aria-hidden /> Scanned
