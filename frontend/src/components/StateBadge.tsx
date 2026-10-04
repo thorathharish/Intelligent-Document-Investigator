@@ -5,10 +5,11 @@ import type { EvidenceState } from '../api/types'
 // and there are no percentages.
 export const STATES: Record<
   EvidenceState,
-  { label: string; meaning: string; style: string; dot: string; Icon: LucideIcon }
+  { label: string; help: string; meaning: string; style: string; dot: string; Icon: LucideIcon }
 > = {
   HIGH: {
     label: 'Strong evidence',
+    help: 'Strong evidence: the relevant claim is explicitly supported by independent verified sources.',
     meaning: 'Stated directly by independent documents that agree.',
     style: 'bg-emerald-50 text-emerald-900 border-emerald-300',
     dot: 'bg-emerald-600',
@@ -16,6 +17,7 @@ export const STATES: Record<
   },
   MEDIUM: {
     label: 'Moderate evidence',
+    help: 'Moderate evidence: verified evidence supports the answer, but corroboration or coverage is limited.',
     meaning: 'Supported by verified evidence, with limited corroboration.',
     style: 'bg-sky-50 text-sky-900 border-sky-300',
     dot: 'bg-sky-600',
@@ -23,6 +25,7 @@ export const STATES: Record<
   },
   LOW: {
     label: 'Limited evidence',
+    help: 'Limited evidence: the available evidence is incomplete, ambiguous, or otherwise insufficient for strong confidence.',
     meaning: 'The evidence is limited, ambiguous, incomplete or of lower quality.',
     style: 'bg-amber-50 text-amber-900 border-amber-300',
     dot: 'bg-amber-500',
@@ -30,6 +33,7 @@ export const STATES: Record<
   },
   CONFLICT: {
     label: 'Evidence disagrees',
+    help: 'Conflicting evidence: verified documents support different positions.',
     meaning: 'Verified evidence contains incompatible positions.',
     style: 'bg-red-50 text-red-900 border-red-300',
     dot: 'bg-red-600',
@@ -37,6 +41,7 @@ export const STATES: Record<
   },
   INSUFFICIENT: {
     label: 'Insufficient evidence',
+    help: 'Insufficient evidence: the available verified documents do not contain enough evidence to answer reliably.',
     meaning: 'No verified evidence is sufficient to answer.',
     style: 'bg-slate-100 text-slate-800 border-slate-300',
     dot: 'bg-slate-500',

@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import type { RunResult } from '../api/types'
 import { plural } from '../lib/format'
+import { InfoTip } from './InfoTip'
 import { StateTag } from './StateBadge'
 
 interface Props {
@@ -18,8 +19,12 @@ export function HistoryList({ runs, selectedRunId, onSelect }: Props) {
 
   return (
     <section aria-label="Questions asked" className="rounded-lg border border-line bg-white">
-      <p className="border-b border-line px-3 py-1.5 text-xs font-semibold text-ink-soft">
+      <p className="flex items-center gap-1 border-b border-line px-3 py-1.5 text-xs font-semibold text-ink-soft">
         {plural(runs.length, 'question')} asked
+        <InfoTip
+          label="History"
+          text="Questions asked in this investigation. Select one to review its answer and supporting evidence."
+        />
       </p>
       <ul className="max-h-[7.75rem] overflow-y-auto">
         {runs.map((run) => {

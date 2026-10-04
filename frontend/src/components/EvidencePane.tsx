@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { Claim, Evidence, RunResult } from '../api/types'
 import { displayName, fileType, hasPageImage, locationOf } from '../lib/format'
 import { ContradictionMap } from './ContradictionMap'
+import { InfoTip } from './InfoTip'
 import { PageViewer } from './PageViewer'
 
 interface CardProps {
@@ -150,6 +151,11 @@ export function EvidencePane({ run, pending, selectedClaimId, onSelectClaim }: P
       <h2 className="flex items-center gap-1.5 text-sm font-semibold">
         <BadgeCheck size={16} className="text-emerald-700" aria-hidden />
         Verified evidence
+        <InfoTip
+          label="Verified evidence"
+          align="right"
+          text="Source passages that were found in the stored documents and verified against the answer before being shown."
+        />
       </h2>
       <p className="mt-0.5 text-xs text-ink-soft">
         {run ? (
@@ -165,7 +171,7 @@ export function EvidencePane({ run, pending, selectedClaimId, onSelectClaim }: P
       <div className="mt-3 min-h-0 flex-1 overflow-y-auto pr-1">
         {!run && pending && (
           <p data-testid="evidence-pending" className="rounded-lg border border-dashed border-slate-300 p-4 text-sm text-ink-soft">
-            Looking for evidence in the documents…
+            Checking the available evidence…
           </p>
         )}
         {!run && !pending && (
@@ -222,6 +228,10 @@ export function EvidencePane({ run, pending, selectedClaimId, onSelectClaim }: P
             <h2 className="flex items-center gap-1.5 text-sm font-semibold">
               <GitCompare size={16} className="text-red-700" aria-hidden />
               Contradiction
+              <InfoTip
+                label="Contradiction"
+                text="Shows verified evidence where documents state different values or positions for the same issue. The system does not silently choose a winner."
+              />
             </h2>
             <div className="mt-2 space-y-3">
               {conflicts.map((aspect) => (

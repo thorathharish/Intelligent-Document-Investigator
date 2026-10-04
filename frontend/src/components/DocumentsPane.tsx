@@ -3,6 +3,7 @@ import { useRef, useState } from 'react'
 import { useDocuments, useUploadDocuments } from '../api/hooks'
 import type { ApiError, DocumentInfo, DocumentStatus } from '../api/types'
 import { displayName, fileType, plural } from '../lib/format'
+import { InfoTip } from './InfoTip'
 
 const STATUS: Record<DocumentStatus, { label: string; style: string }> = {
   queued: { label: 'Queued', style: 'bg-slate-100 text-slate-700' },
@@ -67,7 +68,13 @@ export function DocumentsPane({ investigationId }: { investigationId: string }) 
   return (
     <section className="flex h-full flex-col">
       <div className="flex items-baseline justify-between">
-        <h2 className="text-sm font-semibold">Documents</h2>
+        <h2 className="flex items-center gap-1 text-sm font-semibold">
+          Documents
+          <InfoTip
+            label="Documents"
+            text="These are the source documents available for investigation. Answers are generated only from evidence found in these documents."
+          />
+        </h2>
         {list.length > 0 && (
           <span className="text-xs text-ink-soft">
             {ready} of {list.length} ready

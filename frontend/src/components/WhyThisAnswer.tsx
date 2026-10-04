@@ -2,6 +2,7 @@ import { ChevronDown } from 'lucide-react'
 import { useState } from 'react'
 import type { RunResult } from '../api/types'
 import { plural } from '../lib/format'
+import { InfoTip } from './InfoTip'
 import { STATES } from './StateBadge'
 
 /** Explains the evidence state from the backend's rule-based reasons and counts. No model reasoning is shown. */
@@ -21,23 +22,38 @@ export function WhyThisAnswer({ run }: { run: RunResult }) {
 
   return (
     <div className="mt-4 border-t border-line pt-3">
-      <button
-        type="button"
-        data-testid="why-toggle"
-        aria-expanded={open}
-        onClick={() => setOpen(!open)}
-        className="flex w-full items-center gap-3 text-left"
-      >
-        <span className="shrink-0 text-sm font-semibold">Why this answer?</span>
-        <span data-testid="signals" className="flex min-w-0 flex-1 flex-wrap gap-1.5">
-          {facts.map((fact) => (
-            <span key={fact} className="rounded bg-paper px-2 py-0.5 text-xs text-ink-soft">
-              {fact}
-            </span>
-          ))}
-        </span>
-        <ChevronDown size={16} className={`shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden />
-      </button>
+      <div className="flex items-center gap-1.5">
+        <button
+          type="button"
+          data-testid="why-toggle"
+          aria-expanded={open}
+          onClick={() => setOpen(!open)}
+          className="shrink-0 text-left text-sm font-semibold"
+        >
+          Why this answer?
+        </button>
+        <InfoTip
+          label="Why this answer"
+          text="Shows the evidence-based signals used to describe how well the available sources support this answer."
+        />
+        {/* the counts and chevron toggle too; the labelled button above is the one keyboard users reach */}
+        <button
+          type="button"
+          tabIndex={-1}
+          aria-hidden="true"
+          onClick={() => setOpen(!open)}
+          className="ml-1.5 flex min-w-0 flex-1 items-center gap-3 text-left"
+        >
+          <span data-testid="signals" className="flex min-w-0 flex-1 flex-wrap gap-1.5">
+            {facts.map((fact) => (
+              <span key={fact} className="rounded bg-paper px-2 py-0.5 text-xs text-ink-soft">
+                {fact}
+              </span>
+            ))}
+          </span>
+          <ChevronDown size={16} className={`shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
+        </button>
+      </div>
       {open && (
         <div data-testid="why" className="mt-3 text-sm">
           <p>

@@ -7,8 +7,10 @@ import { ContradictionList } from '../components/ContradictionList'
 import { DocumentsPane } from '../components/DocumentsPane'
 import { EvidencePane } from '../components/EvidencePane'
 import { HistoryList } from '../components/HistoryList'
+import { InfoTip } from '../components/InfoTip'
 import { QuestionBar } from '../components/QuestionBar'
 import { RunCard } from '../components/RunCard'
+import { presentationDelayMs } from '../lib/demoDelay'
 import { contradictionsOf, plural } from '../lib/format'
 
 type Tab = 'questions' | 'contradictions'
@@ -40,6 +42,22 @@ function Workspace({ investigationId }: { investigationId: string }) {
   const [selectedClaimId, setSelectedClaimId] = useState<string | null>(null)
   const [tab, setTab] = useState<Tab>('questions')
   const scroller = useRef<HTMLDivElement>(null)
+  // The question being investigated: from submit until its result is shown, including the
+  // presentation delay for replayed results. Only the latest question may reveal its result.
+  const [pendingQuestion, setPendingQuestion] = useState<string | null>(null)
+  const [askError, setAskError] = useState<string | null>(null)
+  const latestAsk = useRef(0)
+  const revealTimer = useRef<number | undefined>(undefined)
+  const sessionIds = useRef<string[]>([])
+  const isPending = pendingQuestion !== null
+
+  useEffect(
+    () => () => {
+      latestAsk.current += 1 // anything still in flight is ignored after unmount
+      window.clearTimeout(revealTimer.current)
+    },
+    [],
+  )
 
   const allRuns = useMemo(() => runs.data ?? [], [runs.data])
   const visibleRuns = useMemo(() => {
@@ -50,14 +68,14 @@ function Workspace({ investigationId }: { investigationId: string }) {
   const earlierCount = allRuns.filter((r) => !sessionRunIds.includes(r.run_id)).length
   const contradictions = useMemo(() => contradictionsOf(visibleRuns), [visibleRuns])
   const selectedRun = visibleRuns.find((r) => r.run_id === selectedRunId) ?? visibleRuns[visibleRuns.length - 1] ?? null
-  const activeRun = ask.isPending ? null : selectedRun
+  const activeRun = isPending ? null : selectedRun
   const readyDocuments = documents.data?.filter((d) => d.status === 'ready').length ?? 0
   const activeTab: Tab = contradictions.length > 0 ? tab : 'questions'
 
   // a new question or selection brings the top of the result back into view
   useEffect(() => {
     scroller.current?.scrollTo({ top: 0 })
-  }, [ask.isPending, selectedRun?.run_id])
+  }, [isPending, selectedRun?.run_id])
 
   if (investigation.isError) {
     return (
@@ -78,13 +96,34 @@ function Workspace({ investigationId }: { investigationId: string }) {
   }
 
   const onAsk = (question: string) => {
+    // a new question replaces whatever was waiting: its timer is cleared and its result is ignored
+    window.clearTimeout(revealTimer.current)
+    const askId = ++latestAsk.current
     setTab('questions')
     setSelectedClaimId(null)
+    setAskError(null)
+    setPendingQuestion(question)
+
     ask.mutate(question, {
       onSuccess: (run) => {
-        setRepeatedRunId(sessionRunIds.includes(run.run_id) ? run.run_id : null)
-        setSessionRunIds((ids) => (ids.includes(run.run_id) ? ids : [...ids, run.run_id]))
-        setSelectedRunId(run.run_id)
+        if (askId !== latestAsk.current) return
+        const reveal = () => {
+          if (askId !== latestAsk.current) return
+          const repeated = sessionIds.current.includes(run.run_id)
+          if (!repeated) sessionIds.current = [...sessionIds.current, run.run_id]
+          setRepeatedRunId(repeated ? run.run_id : null)
+          setSessionRunIds(sessionIds.current)
+          setSelectedRunId(run.run_id)
+          setPendingQuestion(null)
+        }
+        const delay = presentationDelayMs(run) // 0 for a live model call
+        if (delay > 0) revealTimer.current = window.setTimeout(reveal, delay)
+        else reveal()
+      },
+      onError: (error) => {
+        if (askId !== latestAsk.current) return
+        setAskError((error as unknown as ApiError).message)
+        setPendingQuestion(null)
       },
     })
   }
@@ -162,6 +201,12 @@ function Workspace({ investigationId }: { investigationId: string }) {
             <button type="button" role="tab" aria-selected={activeTab === 'questions'} className={tabClass('questions')} onClick={() => setTab('questions')}>
               Investigation
             </button>
+            <span className="-ml-3.5 pb-2">
+              <InfoTip
+                label="Investigation"
+                text="Ask questions about your uploaded documents and review the answer, evidence, and warnings found for that question."
+              />
+            </span>
             {contradictions.length > 0 && (
               <button
                 type="button"
@@ -181,7 +226,7 @@ function Workspace({ investigationId }: { investigationId: string }) {
 
             {activeTab === 'questions' && (
               <div className="space-y-4">
-                {visibleRuns.length === 0 && !ask.isPending && (
+                {visibleRuns.length === 0 && !isPending && (
                   <div data-testid="empty-investigation" className="mx-auto mt-10 max-w-md text-center">
                     {readyDocuments > 0 ? (
                       <>
@@ -216,12 +261,12 @@ function Workspace({ investigationId }: { investigationId: string }) {
                   <HistoryList runs={visibleRuns} selectedRunId={activeRun?.run_id ?? null} onSelect={selectRun} />
                 )}
 
-                {ask.isPending && (
+                {isPending && (
                   <div data-testid="pending" className="rounded-lg border border-t-4 border-slate-300 bg-white p-6">
-                    <p className="text-lg font-semibold">{ask.variables}</p>
+                    <p className="text-lg font-semibold">{pendingQuestion}</p>
                     <p className="mt-3 flex items-center gap-2 text-sm text-ink-soft">
                       <LoaderCircle size={16} className="animate-spin" aria-hidden />
-                      Retrieving evidence, checking quotes and comparing documents…
+                      Investigating the documents…
                     </p>
                   </div>
                 )}
@@ -235,16 +280,16 @@ function Workspace({ investigationId }: { investigationId: string }) {
                   />
                 )}
 
-                {ask.isError && (
+                {askError && !isPending && (
                   <p className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-900">
-                    The question could not be investigated: {(ask.error as unknown as ApiError).message}
+                    The question could not be investigated: {askError}
                   </p>
                 )}
               </div>
             )}
           </div>
 
-          <QuestionBar readyDocuments={readyDocuments} pending={ask.isPending} onAsk={onAsk} />
+          <QuestionBar readyDocuments={readyDocuments} onAsk={onAsk} />
         </section>
 
         <aside className="min-h-0 border-l border-line p-4 max-[1100px]:border-l-0 max-[1100px]:border-t">
@@ -252,7 +297,7 @@ function Workspace({ investigationId }: { investigationId: string }) {
           <EvidencePane
             key={activeRun?.run_id ?? 'none'}
             run={activeRun}
-            pending={ask.isPending}
+            pending={isPending}
             selectedClaimId={selectedClaimId}
             onSelectClaim={setSelectedClaimId}
           />

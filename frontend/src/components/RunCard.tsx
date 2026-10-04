@@ -1,6 +1,7 @@
 import { FileCheck, TriangleAlert } from 'lucide-react'
 import type { RunResult } from '../api/types'
 import { conflictHeadline, displayName, locationOf, withDisplayNames } from '../lib/format'
+import { InfoTip } from './InfoTip'
 import { STATES, StateBadge } from './StateBadge'
 import { WhyThisAnswer } from './WhyThisAnswer'
 
@@ -39,7 +40,10 @@ export function RunCard({ run, repeated = false, selectedClaimId, onSelectClaim 
         {run.question}
       </h3>
       <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1.5">
-        <StateBadge state={run.state} />
+        <span className="inline-flex items-center gap-1">
+          <StateBadge state={run.state} />
+          <InfoTip label="evidence strength" text={STATES[run.state].help} />
+        </span>
         <p className="text-sm text-ink-soft">{STATES[run.state].meaning}</p>
       </div>
       {repeated && (
@@ -102,6 +106,16 @@ export function RunCard({ run, repeated = false, selectedClaimId, onSelectClaim 
             </p>
           ))}
         </div>
+      )}
+
+      {run.claims.length > 0 && run.answer.length > 0 && (
+        <p className="mt-2 flex items-center gap-1 text-xs text-ink-soft">
+          Numbered citations open the matching evidence
+          <InfoTip
+            label="citations"
+            text="Each citation links the answer to verified source evidence from the documents."
+          />
+        </p>
       )}
 
       {conflicts.length > 0 && (
