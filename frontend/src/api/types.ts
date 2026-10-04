@@ -83,7 +83,7 @@ export interface RunResult {
   answer: AnswerSentence[]
   aspects: Aspect[]
   claims: Claim[]
-  signals: Record<string, number | boolean>
+  signals: Record<string, number | boolean | string>
   reasons: string[]
   related: Evidence[]
   warnings: string[]

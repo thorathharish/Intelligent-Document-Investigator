@@ -24,6 +24,9 @@ class ScriptedLLM:
 
     def complete_json(self, system, user, validate):
         self.calls += 1
+        return LLMResult(value=validate(self.build(user)), model="scripted", latency_ms=1, from_recording=False)
+
+    def build(self, user) -> dict:
         aspects, claims, answer, supersession = [], [], [], []
         for eid, text in _BLOCK.findall(user):
             if self.supersession_quote and self.supersession_quote in text:
@@ -42,9 +45,8 @@ class ScriptedLLM:
         for extra in self.extra_claims:
             claims.append(extra)
             answer.append({"text": "An unsupported statement.", "claims": [extra["id"]]})
-        data = {"aspects": aspects, "claims": claims, "answer": answer, "ambiguous": False,
+        return {"aspects": aspects, "claims": claims, "answer": answer, "ambiguous": False,
                 "supersession": supersession}
-        return LLMResult(value=validate(data), model="scripted", latency_ms=1, from_recording=False)
 
 
 @pytest.fixture(scope="module")
@@ -65,9 +67,10 @@ def inv(client):
     return investigation_id
 
 
-def _ask(client, inv, question, llm, monkeypatch):
+def _ask(client, inv, question, llm, monkeypatch, fresh=True):
+    """fresh=True bypasses the run cache so each test exercises the pipeline."""
     monkeypatch.setattr(analyst, "get_llm_client", lambda: llm)
-    response = client.post(f"/api/investigations/{inv}/questions", json={"question": question})
+    response = client.post(f"/api/investigations/{inv}/questions", json={"question": question, "fresh": fresh})
     assert response.status_code == 200
     return response.json()
 
@@ -93,7 +96,9 @@ def test_a1_normal_question_has_verified_citations(client, inv, monkeypatch):
     result = _ask(client, inv, "What is the late payment fee?", llm, monkeypatch)
 
     assert llm.calls == 1
-    assert result["state"] == "MEDIUM" and result["degraded"] is False
+    assert result["state"] == "HIGH" and result["degraded"] is False
+    assert "2 independent documents state the same thing directly." in result["reasons"]
+    assert "1 extracted statement was discarded because the quote could not be found in the source." in result["reasons"]
     assert {c["evidence"]["document"] for c in result["claims"]} == {
         "Master_Services_Agreement.pdf", "Vendor_Payment_Policy.docx"}
     assert all(c["position_key"] == "percent:1.5" for c in result["claims"])
@@ -117,6 +122,9 @@ def test_cross_document_question_cites_both_documents(client, inv, monkeypatch):
     assert documents == {"Invoice_INV-2041.pdf", "Vendor_Payment_Policy.docx"}
     assert result["signals"]["documents_cited"] == 2 and len(result["answer"]) == 2
     assert len(result["aspects"]) == 2 and all(a["status"] == "consistent" for a in result["aspects"])
+    # each fact rests on a single document, so the answer is not HIGH
+    assert result["state"] == "MEDIUM"
+    assert "Only one document (Invoice_INV-2041.pdf) states invoice total." in result["reasons"]
     _assert_grounded(result)
 
 
@@ -168,8 +176,18 @@ def test_agreeing_documents_are_one_position_without_conflict(client, inv, monke
     llm = ScriptedLLM([("Late fee", "late fee of 1.5% per month", "1.5%", "percent")])
     result = _ask(client, inv, "What is the late payment fee?", llm, monkeypatch)
     (aspect,) = result["aspects"]
-    assert result["state"] == "MEDIUM" and aspect["status"] == "consistent"
+    assert result["state"] == "HIGH" and aspect["status"] == "consistent"
     assert len(aspect["positions"]) == 1 and len(aspect["positions"][0]["document_ids"]) == 2
+
+
+def test_single_document_answer_is_medium(client, inv, monkeypatch):
+    llm = ScriptedLLM([("Approver", "must be approved by the Finance Director", "Finance Director", "text")])
+    result = _ask(client, inv, "Who approves invoices above USD 25,000?", llm, monkeypatch)
+    assert result["state"] == "MEDIUM"
+    assert result["reasons"] == [
+        "1 relevant passage was confirmed across 1 document.",
+        "Only one document (Vendor_Payment_Policy.docx) states this.",
+    ]
 
 
 def test_conflict_engine_failure_still_returns_the_answer(client, inv, monkeypatch):
@@ -181,8 +199,13 @@ def test_conflict_engine_failure_still_returns_the_answer(client, inv, monkeypat
     monkeypatch.setattr(conflicts, "detect", broken)
     llm = ScriptedLLM([("Late fee", "late fee of 1.5% per month", "1.5%", "percent")])
     result = _ask(client, inv, "What is the late payment fee?", llm, monkeypatch)
+    # two agreeing documents would be HIGH; without a completed conflict check it is capped at MEDIUM
     assert result["state"] == "MEDIUM" and len(result["claims"]) == 2
     assert "The conflict check could not be completed." in result["warnings"]
+    assert "The conflict check could not be completed." in result["reasons"]
+    assert result["signals"]["conflict_check_failed"] is True
+    # stored as not cacheable, so it is never served from the run cache
+    assert db.query_one("SELECT degraded FROM runs WHERE id = ?", (result["run_id"],))["degraded"] == 1
 
 
 def test_a5_missing_information_is_not_answered(client, inv, monkeypatch):

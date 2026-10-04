@@ -1,4 +1,5 @@
 import type { RunResult } from '../api/types'
+import { StateBadge } from './StateBadge'
 
 interface Props {
   run: RunResult
@@ -22,11 +23,23 @@ export function RunCard({ run, selected, selectedClaimId, onSelect, onSelectClai
     >
       <p className="text-xs uppercase tracking-wide text-slate-500">Question</p>
       <h3 className="font-medium">{run.question}</h3>
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <StateBadge state={run.state} />
+        {run.degraded && (
+          <span data-testid="degraded" className="rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-900">
+            Evidence only
+          </span>
+        )}
+        {run.cached && (
+          <span data-testid="cached" className="text-xs text-slate-500">
+            Served from cache
+          </span>
+        )}
+      </div>
 
       {run.state === 'CONFLICT' && (
         <div data-testid="conflict" className="mt-3 rounded border border-red-300 bg-red-50 p-3 text-sm">
-          <p className="font-semibold text-red-800">Conflict detected</p>
-          <p className="text-red-900">{run.headline}</p>
+          <p className="font-medium text-red-900">{run.headline}</p>
           {conflicts.map((aspect) => (
             <div key={aspect.id} className="mt-2">
               <p className="text-xs uppercase tracking-wide text-red-800">{aspect.label}</p>
@@ -110,6 +123,14 @@ export function RunCard({ run, selected, selectedClaimId, onSelect, onSelectClai
             </p>
           ))}
         </div>
+      )}
+
+      {run.reasons.length > 0 && (
+        <ul data-testid="reasons" className="mt-3 list-disc space-y-0.5 pl-5 text-xs text-slate-600">
+          {run.reasons.map((reason, i) => (
+            <li key={i}>{reason}</li>
+          ))}
+        </ul>
       )}
 
       {run.warnings.map((warning, i) => (

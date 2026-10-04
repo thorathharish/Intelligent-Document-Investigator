@@ -1,10 +1,11 @@
 """Answer composition in code, from verified claims only (LLD section 15).
 
-The state is CONFLICT when the conflict engine finds one, otherwise provisional (INSUFFICIENT or MEDIUM).
-The full uncertainty rules and reason templates arrive in Checkpoint 5.
+The evidence state and its reasons come from the uncertainty engine; nothing here asks the model.
 """
 from ..ingestion.ocr import OCR_LOW_THRESHOLD
+from ..retrieval import embedder
 from ..schemas import AnalystOutput
+from . import uncertainty
 
 MAX_SENTENCE_CHARS = 400
 RELATED_QUOTE_CHARS = 240
@@ -35,25 +36,57 @@ def related_passages(evidence: list[dict], limit: int) -> list[dict]:
     return related
 
 
-def _signals(evidence: list[dict], extracted: int, claims: list[dict], dropped: int, aspects: list[dict], ambiguous: bool) -> dict:
+def _signals(
+    evidence: list[dict],
+    extracted: int,
+    claims: list[dict],
+    dropped: int,
+    aspects: list[dict],
+    ambiguous: bool = False,
+    evidence_only: bool = False,
+    conflict_check_failed: bool = False,
+    llm_source: str = "none",
+) -> dict:
+    explicit = sum(1 for c in claims if c["explicit"])
+    covered = sum(1 for a in aspects if a["status"] != "uncovered")
     return {
+        # LLD section 5
         "evidence_retrieved": len(evidence),
         "claims_extracted": extracted,
         "claims_verified": len(claims),
         "claims_dropped": dropped,
         "documents_cited": len({c["evidence"]["document_id"] for c in claims}),
         "aspects_total": len(aspects),
-        "aspects_covered": sum(1 for a in aspects if a["status"] != "uncovered"),
-        "conflicting_aspects": 0,
-        "explicit_claims": sum(1 for c in claims if c["explicit"]),
+        "aspects_covered": covered,
+        "conflicting_aspects": sum(1 for a in aspects if a["status"] == "conflict"),
+        "explicit_claims": explicit,
         "ocr_claims": sum(1 for c in claims if c["evidence"]["extraction_method"] == "ocr"),
         "ocr_low_claims": sum(1 for c in claims if c["evidence"]["ocr_quality"] == "low"),
         "ambiguous": ambiguous,
+        # additional deterministic signals
+        "inferred_claims": len(claims) - explicit,
+        "aspects_uncovered": len(aspects) - covered,
+        "agreeing_documents": max((len(p["document_ids"]) for a in aspects for p in a["positions"]), default=0),
+        "evidence_only": evidence_only,
+        "conflict_check_failed": conflict_check_failed,
+        "llm_source": llm_source,  # live | recording | none
     }
 
 
 def _join(names: list[str]) -> str:
     return names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1]
+
+
+def _warnings(signals: dict) -> list[str]:
+    warnings = []
+    if signals["ocr_claims"]:
+        count = signals["ocr_claims"]
+        warnings.append(f'{count} passage{"" if count == 1 else "s"} {"comes" if count == 1 else "come"} from scanned images.')
+    if signals["conflict_check_failed"]:
+        warnings.append("The conflict check could not be completed.")
+    if embedder.status() == "unavailable":
+        warnings.append("Semantic search is unavailable; keyword search only.")
+    return warnings
 
 
 def compose(
@@ -62,6 +95,7 @@ def compose(
     evidence: list[dict],
     aspects: list[dict],
     conflict_check_failed: bool = False,
+    llm_source: str = "live",
 ) -> dict:
     """Build the answer part of the investigation result from verified claims."""
     claims = verification["claims"]
@@ -103,42 +137,24 @@ def compose(
         claim["citation"] = numbers[claim["id"]]
     claims.sort(key=lambda c: c["citation"])
 
-    signals = _signals(evidence, len(output.claims), claims, len(verification["dropped"]), aspects, output.ambiguous)
-    signals["conflicting_aspects"] = len(conflicting)
-    warnings = []
-    if signals["ocr_claims"]:
-        warnings.append(f'{signals["ocr_claims"]} passage(s) come from scanned images.')
-    if conflict_check_failed:
-        warnings.append("The conflict check could not be completed.")
+    not_found = sum(1 for d in verification["dropped"] if d["reason"] != "duplicate")
+    signals = _signals(evidence, len(output.claims), claims, not_found, aspects, output.ambiguous,
+                       conflict_check_failed=conflict_check_failed, llm_source=llm_source)
+    verdict = uncertainty.evaluate(
+        aspects, claims, evidence,
+        ambiguous=output.ambiguous, ambiguity_note=output.ambiguity_note,
+        conflict_check_failed=conflict_check_failed, claims_dropped=not_found,
+    )
+    state = verdict["state"]
 
-    if not claims:
-        return {
-            "state": "INSUFFICIENT",
-            "headline": INSUFFICIENT_HEADLINE,
-            "answer": [],
-            "aspects": aspects,
-            "claims": [],
-            "signals": signals,
-            "reasons": ["None of the retrieved passages states an answer to this question."],
-            "related": related_passages(evidence, 3),
-            "warnings": warnings,
-        }
-
-    reasons = [
-        f'{signals["claims_verified"]} relevant passage(s) were confirmed across '
-        f'{signals["documents_cited"]} document(s).'
-    ]
-    if signals["claims_dropped"]:
-        reasons.append(
-            f'{signals["claims_dropped"]} extracted statement(s) were discarded because their quote could not '
-            "be found in the source."
-        )
-    if conflicting:
+    if state == "INSUFFICIENT":
+        headline, sentences, claims, related = INSUFFICIENT_HEADLINE, [], [], related_passages(evidence, 3)
+    elif state == "CONFLICT":
         labels = [a["label"][:1].lower() + a["label"][1:] for a in conflicting]
-        state, headline = "CONFLICT", f"The documents disagree on {_join(labels)}."
+        headline, related = f"The documents disagree on {_join(labels)}.", []
     else:
-        # provisional until the uncertainty engine (Checkpoint 5)
-        state, headline = "MEDIUM", sentences[0]["text"]
+        headline, related = (sentences[0]["text"] if sentences else "Here is what the documents state."), []
+
     return {
         "state": state,
         "headline": headline,
@@ -146,36 +162,42 @@ def compose(
         "aspects": aspects,
         "claims": claims,
         "signals": signals,
-        "reasons": reasons,
-        "related": [],
-        "warnings": warnings,
+        "reasons": verdict["reasons"],
+        "related": related,
+        "warnings": _warnings(signals),
+        "rule": verdict["rule"],
     }
 
 
 def compose_no_documents() -> dict:
+    verdict = uncertainty.evaluate([], [], [], has_ready_documents=False)
     return {
-        "state": "INSUFFICIENT",
+        "state": verdict["state"],
         "headline": INSUFFICIENT_HEADLINE,
         "answer": [],
         "aspects": [],
         "claims": [],
-        "signals": _signals([], 0, [], 0, [], False),
-        "reasons": ["No processed documents are available yet."],
+        "signals": _signals([], 0, [], 0, []),
+        "reasons": verdict["reasons"],
         "related": [],
         "warnings": [],
+        "rule": verdict["rule"],
     }
 
 
 def compose_evidence_only(evidence: list[dict]) -> dict:
     """LLM unavailable or unusable output: show the closest passages, claim nothing."""
+    verdict = uncertainty.evaluate([], [], evidence, evidence_only=True)
+    signals = _signals(evidence, 0, [], 0, [], evidence_only=True)
     return {
-        "state": "LOW",
+        "state": verdict["state"],
         "headline": DEGRADED_HEADLINE,
         "answer": [],
         "aspects": [],
         "claims": [],
-        "signals": _signals(evidence, 0, [], 0, [], False),
-        "reasons": ["Automatic analysis was unavailable, so only the closest passages are shown."],
+        "signals": signals,
+        "reasons": verdict["reasons"],
         "related": related_passages(evidence, 5),
-        "warnings": ["Automatic analysis unavailable."],
+        "warnings": ["Automatic analysis unavailable."] + _warnings(signals),
+        "rule": verdict["rule"],
     }

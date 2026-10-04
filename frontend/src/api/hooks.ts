@@ -31,8 +31,13 @@ export function useAskQuestion(id: string) {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (question: string) => postJson<RunResult>(`/investigations/${id}/questions`, { question }),
+    // a cache hit returns the stored run (same run_id): update it in place instead of adding a second card
     onSuccess: (run) =>
-      queryClient.setQueryData<RunResult[]>(['runs', id], (previous) => [...(previous ?? []), run]),
+      queryClient.setQueryData<RunResult[]>(['runs', id], (previous = []) =>
+        previous.some((r) => r.run_id === run.run_id)
+          ? previous.map((r) => (r.run_id === run.run_id ? run : r))
+          : [...previous, run],
+      ),
   })
 }
 
