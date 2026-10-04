@@ -208,6 +208,21 @@ def test_conflict_engine_failure_still_returns_the_answer(client, inv, monkeypat
     assert db.query_one("SELECT degraded FROM runs WHERE id = ?", (result["run_id"],))["degraded"] == 1
 
 
+def test_internal_passage_ids_are_removed_from_answer_sentences(client, inv, monkeypatch):
+    llm = ScriptedLLM([("Late fee", "late fee of 1.5% per month", "1.5%", "percent")])
+    build = llm.build
+
+    def with_ids(user):
+        data = build(user)
+        data["answer"] = [{"text": "The late fee is 1.5% per month (E1, E4) in both (C1) documents [E2].",
+                           "claims": [c["id"] for c in data["claims"]]}]
+        return data
+
+    llm.build = with_ids
+    result = _ask(client, inv, "What is the late payment fee?", llm, monkeypatch)
+    assert result["answer"][0]["text"] == "The late fee is 1.5% per month in both documents."
+
+
 def test_a5_missing_information_is_not_answered(client, inv, monkeypatch):
     result = _ask(client, inv, "What is the warranty period for the equipment?", ScriptedLLM([]), monkeypatch)
     assert result["state"] == "INSUFFICIENT"

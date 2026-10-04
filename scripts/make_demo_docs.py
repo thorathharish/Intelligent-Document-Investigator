@@ -2,8 +2,10 @@
 
 Usage (from repo root, venv active):
   python scripts/make_demo_docs.py --set A
+  python scripts/make_demo_docs.py --set B
 """
 import argparse
+import json
 from pathlib import Path
 
 import docx
@@ -135,12 +137,86 @@ def make_set_a(out: Path) -> None:
         print("  ", f.name)
 
 
+def make_set_b(out: Path) -> None:
+    """An unrelated domain (HR) to show that nothing is tuned to Set A."""
+    out.mkdir(parents=True, exist_ok=True)
+
+    write_pdf(
+        out / "Employee_Handbook.pdf",
+        [
+            [
+                ("t", "EMPLOYEE HANDBOOK"),
+                ("p", "This handbook applies to all employees of Brightwave Technologies and describes the main "
+                      "terms of employment."),
+                ("h", "1. Annual Leave"),
+                ("p", "Every employee is entitled to 18 days of paid annual leave in each calendar year."),
+                ("h", "2. Remote Work"),
+                ("p", "Remote work is permitted for up to two days per week with the approval of the employee's "
+                      "manager."),
+            ],
+            [
+                ("h", "3. Probation"),
+                ("p", "All new employees serve a probation period of six months from their joining date."),
+                ("h", "4. Notice Period"),
+                ("p", "After probation, either the employee or the company may end the employment by giving "
+                      "30 days' written notice."),
+                ("h", "5. Working Hours"),
+                ("p", "Standard working hours are 9:00 to 18:00, Monday to Friday, with a one-hour lunch break."),
+            ],
+        ],
+    )
+
+    letter = docx.Document()
+    letter.add_heading("Offer of Employment", level=1)
+    letter.add_paragraph(
+        "We are pleased to offer you the position of Software Engineer at Brightwave Technologies."
+    )
+    letter.add_heading("Joining Date", level=2)
+    letter.add_paragraph("Your joining date is 1 August 2025.")
+    letter.add_heading("Leave", level=2)
+    letter.add_paragraph("You are entitled to 24 days of paid annual leave in each calendar year.")
+    letter.add_heading("Probation", level=2)
+    letter.add_paragraph("Your employment is subject to a probation period of 6 months.")
+    letter.add_heading("Compensation", level=2)
+    letter.add_paragraph("Your annual salary is INR 1,800,000, paid in twelve monthly instalments.")
+    letter.save(str(out / "Offer_Letter.docx"))
+
+    (out / "HR_Memo_2025-07.txt").write_text(
+        "HR MEMO - JULY 2025\n\n"
+        "To all employees of Brightwave Technologies.\n\n"
+        "Effective 1 July 2025, remote work is not permitted for any employee. All staff are expected to work "
+        "from the office on every working day.\n\n"
+        "Please contact the HR team if you have any questions about this change.\n",
+        encoding="utf-8",
+    )
+    write_manifest(out, "Demo: HR policy review (Set B)",
+                   ["Employee_Handbook.pdf", "Offer_Letter.docx", "HR_Memo_2025-07.txt"])
+    print("Set B written to", out)
+    for f in sorted(out.iterdir()):
+        print("  ", f.name)
+
+
+def write_manifest(out: Path, title: str, files: list[str]) -> None:
+    """The demo seed endpoint reads this to know which files make up the set."""
+    (out / "manifest.json").write_text(json.dumps({"title": title, "files": files}, indent=2) + "\n", encoding="utf-8")
+
+
+SET_A_TITLE = "Demo: vendor contract review (Set A)"
+# the scanned PNG is the invoice in the demo; its text-PDF twin is only for tests that skip OCR
+SET_A_FILES = ["Master_Services_Agreement.pdf", "Amendment_1.pdf", "Invoice_INV-2041.png", "Vendor_Payment_Policy.docx"]
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--set", choices=["A"], required=True)
+    parser.add_argument("--set", choices=["A", "B", "manifest-A"], required=True)
     args = parser.parse_args()
     if args.set == "A":
         make_set_a(ROOT / "demo_docs" / "set_a")
+        write_manifest(ROOT / "demo_docs" / "set_a", SET_A_TITLE, SET_A_FILES)
+    elif args.set == "manifest-A":  # write only the manifest, leaving the Set A files untouched
+        write_manifest(ROOT / "demo_docs" / "set_a", SET_A_TITLE, SET_A_FILES)
+    else:
+        make_set_b(ROOT / "demo_docs" / "set_b")
 
 
 if __name__ == "__main__":

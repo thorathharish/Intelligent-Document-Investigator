@@ -16,6 +16,10 @@ class InvestigationCreate(BaseModel):
     title: str | None = None
 
 
+class SeedRequest(BaseModel):
+    set: str
+
+
 class QuestionRequest(BaseModel):
     question: str = ""
     fresh: bool = False

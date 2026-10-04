@@ -10,6 +10,12 @@ export function useCreateInvestigation() {
   })
 }
 
+export function useSeedDemo() {
+  return useMutation({
+    mutationFn: (set: 'A' | 'B') => postJson<Investigation>('/demo/seed', { set }),
+  })
+}
+
 export function useInvestigation(id: string) {
   return useQuery({ queryKey: ['investigation', id], queryFn: () => api<Investigation>(`/investigations/${id}`) })
 }

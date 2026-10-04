@@ -24,12 +24,15 @@ def upload_documents(
         raise api_error(400, "no_files", "No files were uploaded")
     if len(files) > settings.max_files:
         raise api_error(400, "too_many_files", f"Upload at most {settings.max_files} files at a time")
+    return store_files(investigation_id, [(upload.filename or "unnamed", upload.file.read()) for upload in files], background)
 
+
+def store_files(investigation_id: str, files: list[tuple[str, bytes]], background: BackgroundTasks) -> dict:
+    """Validate, store and queue files for processing. Shared by upload and the demo seed."""
     settings.uploads_dir.mkdir(parents=True, exist_ok=True)
     accepted_ids, rejected = [], []
-    for upload in files:
-        filename = (upload.filename or "unnamed").replace("\\", "/").rsplit("/", 1)[-1]
-        data = upload.file.read()
+    for name, data in files:
+        filename = name.replace("\\", "/").rsplit("/", 1)[-1]
         try:
             ext, sha256 = validate_file(filename, data)
         except ValidationError as exc:

@@ -2,12 +2,15 @@
 
 The evidence state and its reasons come from the uncertainty engine; nothing here asks the model.
 """
+import re
+
 from ..retrieval import embedder
 from ..schemas import AnalystOutput
 from . import uncertainty
 from .verifier import ocr_quality
 
 MAX_SENTENCE_CHARS = 400
+_EVIDENCE_IDS = re.compile(r"\s*[\(\[]\s*[EC]\d+(?:\s*(?:,|and|&)\s*[EC]\d+)*\s*[\)\]]")
 RELATED_QUOTE_CHARS = 240
 INSUFFICIENT_HEADLINE = "The uploaded documents do not contain enough evidence to answer this."
 DEGRADED_HEADLINE = "Automatic analysis is unavailable right now. These are the most relevant passages."
@@ -113,7 +116,8 @@ def compose(
     # keep a draft sentence only if it cites at least one claim and every cited claim was verified;
     # draft sentences about a conflicting aspect are replaced by the generated ones above
     for sentence in output.answer:
-        text = sentence.text.strip()[:MAX_SENTENCE_CHARS]
+        # internal ids such as "(E1, E2)" or "(C1)" mean nothing to the reader; citations carry the sources
+        text = _EVIDENCE_IDS.sub("", sentence.text).strip()[:MAX_SENTENCE_CHARS]
         if not (text and sentence.claims and all(c in verified_ids for c in sentence.claims)):
             continue
         if any(by_id[c]["aspect_id"] in conflict_aspect_ids for c in sentence.claims):
