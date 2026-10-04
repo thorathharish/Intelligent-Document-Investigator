@@ -1,110 +1,266 @@
-import { BadgeCheck, GitCompare, ShieldAlert } from 'lucide-react'
-import { useState } from 'react'
+import { BadgeCheck, CircleHelp, FileCheck, GitCompare } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useCreateInvestigation, useSeedDemo } from '../api/hooks'
 import type { ApiError } from '../api/types'
+import { StateBadge } from '../components/StateBadge'
 
-const CASES = [
+const DIFFERENTIATORS = [
   {
-    set: 'A' as const,
-    testId: 'seed-a',
-    action: 'Load contract case',
-    title: 'Vendor contract review',
-    about: 'A services agreement, its amendment, a scanned invoice and a payment policy. The payment terms do not all agree.',
+    Icon: BadgeCheck,
+    title: 'Evidence-first answers',
+    text: 'Every answer is tied to verified source passages from the documents.',
   },
   {
-    set: 'B' as const,
-    testId: 'seed-b',
-    action: 'Load HR case',
-    title: 'HR policy review',
-    about: 'An employee handbook, an offer letter and an HR memo. Leave entitlement and remote work are stated differently.',
+    Icon: GitCompare,
+    title: 'Detects contradictions',
+    text: 'When documents disagree, the system shows both positions instead of silently choosing one.',
+  },
+  {
+    Icon: CircleHelp,
+    title: 'Knows when evidence is insufficient',
+    text: 'The system can say when the available documents do not support a reliable answer.',
   },
 ]
 
-const PROMISES = [
-  { Icon: BadgeCheck, text: 'Every quote is checked against the document before you see it.' },
-  { Icon: GitCompare, text: 'When documents disagree, both sides are shown. Nothing is picked for you.' },
-  { Icon: ShieldAlert, text: 'When the evidence is thin or missing, it says so instead of guessing.' },
+const STEPS = [
+  { title: 'Upload documents', text: 'PDF, Word, text, and scanned images.' },
+  { title: 'Ask a question', text: 'Use natural language to investigate the documents.' },
+  { title: 'Verify the evidence', text: 'Relevant source passages are checked before they support the answer.' },
+  {
+    title: 'See conflicts and uncertainty',
+    text: 'Compare conflicting evidence and understand when the answer is limited.',
+  },
 ]
+
+// The contract demo case, as the workspace shows it. Used only to illustrate the product.
+const PREVIEW_EVIDENCE = [
+  {
+    document: 'Master Services Agreement',
+    location: 'Page 2 · 4.2 Payment Terms',
+    quote: 'within thirty (30) days of the invoice date',
+  },
+  { document: 'Amendment 1', location: 'Page 1 · 1. Payment Terms', quote: 'within 30 days of the invoice date' },
+  { document: 'Invoice INV-2041', location: 'Page 1 · scanned', quote: 'Payment due within 45 days of the invoice date' },
+]
+
+function PositionBox({ value, sources }: { value: string; sources: string[] }) {
+  return (
+    <div className="flex-1 rounded-lg border-2 border-red-200 bg-white p-3">
+      <p className="font-serif text-3xl leading-none">{value}</p>
+      <ul className="mt-2 space-y-0.5 text-sm text-ink-soft">
+        {sources.map((source) => (
+          <li key={source}>{source}</li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+function Conflict() {
+  return (
+    <div className="flex items-stretch gap-2">
+      <PositionBox value="30 days" sources={['Master Services Agreement', 'Amendment 1']} />
+      <div className="flex items-center font-serif text-3xl font-semibold text-red-700" aria-label="conflicts with">
+        ≠
+      </div>
+      <PositionBox value="45 days" sources={['Invoice INV-2041']} />
+    </div>
+  )
+}
 
 export function HomePage() {
-  const [title, setTitle] = useState('')
   const navigate = useNavigate()
   const create = useCreateInvestigation()
   const seed = useSeedDemo()
+  const busy = create.isPending || seed.isPending
 
-  const start = (e: React.FormEvent) => {
-    e.preventDefault()
-    create.mutate(title, { onSuccess: (investigation) => navigate(`/i/${investigation.id}`) })
-  }
+  const start = () =>
+    create.mutate('New investigation', { onSuccess: (investigation) => navigate(`/i/${investigation.id}`) })
   const load = (set: 'A' | 'B') =>
     seed.mutate(set, { onSuccess: (investigation) => navigate(`/i/${investigation.id}`) })
+  const failure = (create.error ?? seed.error) as unknown as ApiError | null
+
+  const primary =
+    'rounded-lg bg-ink px-5 py-3 text-sm font-semibold text-white hover:bg-accent disabled:opacity-50 transition-colors'
+  const secondary =
+    'rounded-lg border border-slate-400 bg-white px-5 py-3 text-sm font-semibold hover:border-accent disabled:opacity-50 transition-colors'
 
   return (
-    <main className="mx-auto max-w-3xl px-6 py-14">
-      <p className="text-sm font-semibold text-accent">Document Investigator</p>
-      <h1 className="mt-2 font-serif text-4xl leading-tight">
-        Answers from your documents, with the proof beside them.
-      </h1>
-      <ul className="mt-6 space-y-2">
-        {PROMISES.map(({ Icon, text }) => (
-          <li key={text} className="flex items-start gap-2 text-sm text-ink-soft">
-            <Icon size={16} className="mt-0.5 shrink-0 text-ink" aria-hidden />
-            {text}
-          </li>
-        ))}
-      </ul>
+    <div className="min-h-screen bg-paper">
+      <header className="border-b border-line bg-white">
+        <nav className="mx-auto flex max-w-6xl items-center justify-between px-6 py-3" aria-label="Main">
+          <p className="flex items-center gap-2 font-semibold">
+            <FileCheck size={18} className="text-accent" aria-hidden />
+            Document Investigator
+          </p>
+          <button type="button" onClick={start} disabled={busy} className="text-sm font-semibold text-accent hover:underline">
+            Start investigating
+          </button>
+        </nav>
+      </header>
 
-      <section className="mt-10">
-        <h2 className="text-sm font-semibold">Open a demo case</h2>
-        <div className="mt-3 grid gap-3 sm:grid-cols-2">
-          {CASES.map((item) => (
-            <div key={item.set} className="flex flex-col rounded-lg border border-line bg-white p-4">
-              <p className="font-serif text-xl">{item.title}</p>
-              <p className="mt-1 flex-1 text-sm text-ink-soft">{item.about}</p>
-              <button
-                type="button"
-                data-testid={item.testId}
-                disabled={seed.isPending}
-                onClick={() => load(item.set)}
-                className="mt-4 rounded-lg bg-ink px-4 py-2 text-sm font-medium text-white hover:bg-accent disabled:opacity-50"
-              >
-                {seed.isPending && seed.variables === item.set ? 'Loading…' : item.action}
+      <main>
+        {/* hero */}
+        <section className="mx-auto grid max-w-6xl items-center gap-10 px-6 py-14 lg:grid-cols-[1.05fr_1fr]">
+          <div>
+            <h1 className="font-serif text-6xl leading-[1.05]">Answers you can verify.</h1>
+            <p className="mt-5 max-w-xl text-lg leading-relaxed text-ink-soft">
+              Investigate scattered documents with evidence-backed answers, conflict detection, and clear
+              uncertainty.
+            </p>
+            <div className="mt-8 flex flex-wrap gap-3">
+              <button type="button" data-testid="start" onClick={start} disabled={busy} className={primary}>
+                {create.isPending ? 'Opening…' : 'Start investigating'}
+              </button>
+              <button type="button" data-testid="seed-a" onClick={() => load('A')} disabled={busy} className={secondary}>
+                {seed.isPending && seed.variables === 'A' ? 'Loading the case…' : 'Try demo case'}
               </button>
             </div>
-          ))}
-        </div>
-        {seed.isError && (
-          <p className="mt-2 text-sm text-red-800">
-            The demo case could not be loaded: {(seed.error as unknown as ApiError).message}
-          </p>
-        )}
-      </section>
+            <p className="mt-4 flex items-center gap-1.5 text-sm text-ink-soft">
+              <BadgeCheck size={15} className="text-emerald-700" aria-hidden />
+              Answers are checked against the source documents.
+            </p>
+            {failure && (
+              <p role="alert" className="mt-3 text-sm text-red-800">
+                That could not be opened: {failure.message}
+              </p>
+            )}
+          </div>
 
-      <section className="mt-10">
-        <h2 className="text-sm font-semibold">Or start with your own documents</h2>
-        <form onSubmit={start} className="mt-3 flex gap-2">
-          <input
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="Investigation title"
-            aria-label="Investigation title"
-            className="flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
-          />
-          <button
-            type="submit"
-            disabled={create.isPending}
-            className="rounded-lg border border-ink px-4 py-2 text-sm font-medium hover:bg-ink hover:text-white disabled:opacity-50"
-          >
-            Start investigation
-          </button>
-        </form>
-        {create.isError && (
-          <p className="mt-2 text-sm text-red-800">
-            The investigation could not be created: {(create.error as unknown as ApiError).message}
+          <figure className="rounded-xl border border-t-4 border-slate-300 border-t-red-600 bg-white p-6 shadow-sm">
+            <p className="text-xs font-semibold text-ink-soft">Question</p>
+            <p className="mt-0.5 text-lg font-semibold">What payment terms apply?</p>
+            <div className="mt-3">
+              <StateBadge state="CONFLICT" />
+            </div>
+            <p className="mt-4 font-serif text-xl text-red-900">Evidence disagrees on the payment period</p>
+            <div className="mt-3">
+              <Conflict />
+            </div>
+            <p className="mt-4 flex items-center gap-1.5 border-t border-line pt-3 text-sm">
+              <BadgeCheck size={15} className="text-emerald-700" aria-hidden />
+              <span className="font-semibold">Verified evidence</span>
+              <span className="text-ink-soft">3 source passages verified. No side chosen.</span>
+            </p>
+            <figcaption className="mt-3 text-xs text-ink-soft">
+              Preview of a result from the contract demo case.
+            </figcaption>
+          </figure>
+        </section>
+
+        {/* differentiators */}
+        <section className="border-y border-line bg-white" aria-labelledby="different">
+          <div className="mx-auto max-w-6xl px-6 py-12">
+            <h2 id="different" className="font-serif text-3xl">
+              It investigates. It does not just answer.
+            </h2>
+            <div className="mt-6 grid gap-4 md:grid-cols-3">
+              {DIFFERENTIATORS.map(({ Icon, title, text }) => (
+                <div key={title} className="rounded-lg border border-line bg-paper p-5">
+                  <Icon size={22} className="text-accent" aria-hidden />
+                  <h3 className="mt-3 font-semibold">{title}</h3>
+                  <p className="mt-1.5 text-sm leading-relaxed text-ink-soft">{text}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* how it works */}
+        <section className="mx-auto max-w-6xl px-6 py-12" aria-labelledby="how">
+          <h2 id="how" className="font-serif text-3xl">
+            How it works
+          </h2>
+          <ol className="mt-6 grid gap-x-6 gap-y-5 sm:grid-cols-2 lg:grid-cols-4">
+            {STEPS.map((step, i) => (
+              <li key={step.title} className="border-t-2 border-ink pt-3">
+                <p className="font-serif text-2xl text-ink-soft">{String(i + 1).padStart(2, '0')}</p>
+                <h3 className="mt-1 font-semibold">{step.title}</h3>
+                <p className="mt-1 text-sm leading-relaxed text-ink-soft">{step.text}</p>
+              </li>
+            ))}
+          </ol>
+        </section>
+
+        {/* product preview */}
+        <section className="border-y border-line bg-white" aria-labelledby="preview">
+          <div className="mx-auto max-w-6xl px-6 py-12">
+            <h2 id="preview" className="font-serif text-3xl">
+              From question to evidence
+            </h2>
+            <p className="mt-2 max-w-2xl text-sm text-ink-soft">
+              One question in the contract demo case. The answer, the conflict and the passages behind it stay
+              side by side, so you can check every step.
+            </p>
+            <div className="mt-6 grid gap-4 lg:grid-cols-[1.15fr_1fr]">
+              <div className="rounded-lg border border-line bg-paper p-5">
+                <p className="text-xs font-semibold text-ink-soft">Question</p>
+                <p className="mt-0.5 font-semibold">What payment terms apply?</p>
+                <p className="mt-4 text-xs font-semibold text-ink-soft">Answer</p>
+                <div className="mt-1">
+                  <StateBadge state="CONFLICT" />
+                </div>
+                <p className="mt-3 font-serif text-lg leading-relaxed">
+                  Master Services Agreement and Amendment 1 state 30 days. Invoice INV-2041 states 45 days.
+                </p>
+                <div className="mt-4">
+                  <Conflict />
+                </div>
+              </div>
+              <div className="rounded-lg border border-line bg-paper p-5">
+                <p className="flex items-center gap-1.5 text-sm font-semibold">
+                  <BadgeCheck size={16} className="text-emerald-700" aria-hidden />
+                  Verified evidence
+                </p>
+                <ul className="mt-3 space-y-3">
+                  {PREVIEW_EVIDENCE.map((item, i) => (
+                    <li key={item.document} className="rounded-lg border border-line bg-white p-3">
+                      <p className="text-sm font-semibold">
+                        <span className="mr-2 inline-flex h-5 min-w-5 items-center justify-center rounded bg-blue-50 px-1 text-xs text-accent">
+                          {i + 1}
+                        </span>
+                        {item.document}
+                      </p>
+                      <p className="text-xs text-ink-soft">{item.location}</p>
+                      <p className="mt-2 text-sm">
+                        <span className="verified-quote">{item.quote}</span>
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* demo call to action */}
+        <section className="mx-auto max-w-6xl px-6 py-14 text-center" aria-labelledby="try">
+          <h2 id="try" className="font-serif text-4xl">
+            See the investigation for yourself.
+          </h2>
+          <p className="mx-auto mt-3 max-w-xl text-ink-soft">
+            Start with a vendor contract case containing agreements, amendments, a policy, and a scanned invoice.
           </p>
-        )}
-      </section>
-    </main>
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+            <button type="button" data-testid="seed-a-bottom" onClick={() => load('A')} disabled={busy} className={primary}>
+              Try the contract case
+            </button>
+            <button type="button" data-testid="seed-b" onClick={() => load('B')} disabled={busy} className={secondary}>
+              {seed.isPending && seed.variables === 'B' ? 'Loading the case…' : 'Try the HR case'}
+            </button>
+          </div>
+          <p className="mt-3 text-xs text-ink-soft">
+            The HR case is an unrelated set of documents handled by the same system.
+          </p>
+        </section>
+      </main>
+
+      <footer className="border-t border-line bg-white">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-2 px-6 py-5 text-sm">
+          <p className="font-semibold">Document Investigator</p>
+          <p className="text-ink-soft">Evidence-backed document investigation.</p>
+        </div>
+      </footer>
+    </div>
   )
 }
