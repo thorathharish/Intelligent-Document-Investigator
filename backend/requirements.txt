@@ -1,0 +1,14 @@
+fastapi
+uvicorn[standard]
+python-multipart
+python-dotenv
+httpx
+pymupdf
+python-docx
+fastembed
+rank-bm25
+numpy
+rapidocr-onnxruntime
+rapidfuzz
+python-dateutil
+pytest
