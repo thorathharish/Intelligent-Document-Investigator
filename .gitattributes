@@ -1,0 +1,5 @@
+# files that run on Linux must keep LF line endings even when checked out on Windows
+*.sh text eol=lf
+*.service text eol=lf
+deploy/oracle/nginx.conf text eol=lf
+deploy/oracle/*.example text eol=lf

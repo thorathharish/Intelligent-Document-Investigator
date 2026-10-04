@@ -1,0 +1,18 @@
+[Unit]
+Description=Document Investigator API (FastAPI)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=investigator
+Group=investigator
+WorkingDirectory=/opt/document-investigator
+EnvironmentFile=/etc/document-investigator.env
+# One worker: the embedding model, OCR engine, search index and request spacing live in the process.
+ExecStart=/opt/document-investigator/.venv/bin/uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8000 --workers 1
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target
