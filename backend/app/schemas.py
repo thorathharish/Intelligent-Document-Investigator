@@ -12,6 +12,10 @@ class HealthResponse(BaseModel):
     ocr: Literal["ok", "unavailable"]
 
 
+class InvestigationCreate(BaseModel):
+    title: str | None = None
+
+
 # --- Analyst output (LLD section 10.1). Lenient where safe. ---
 
 VALUE_TYPES = {"duration", "date", "money", "percent", "number", "boolean", "text", "none"}
