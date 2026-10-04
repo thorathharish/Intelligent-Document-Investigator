@@ -1,5 +1,9 @@
+import { TriangleAlert } from 'lucide-react'
 import type { RunResult } from '../api/types'
-import { StateBadge } from './StateBadge'
+import { timeOf } from '../lib/format'
+import { ContradictionMap } from './ContradictionMap'
+import { STATES, StateBadge } from './StateBadge'
+import { WhyThisAnswer } from './WhyThisAnswer'
 
 interface Props {
   run: RunResult
@@ -9,97 +13,70 @@ interface Props {
   onSelectClaim: (claimId: string) => void
 }
 
+const NO_ANSWER = "I couldn't find verified evidence sufficient to answer this question."
+const EVIDENCE_ONLY = 'Evidence is available, but automatic analysis was unavailable. The closest passages are shown as evidence.'
+
 export function RunCard({ run, selected, selectedClaimId, onSelect, onSelectClaim }: Props) {
-  const citation = new Map(run.claims.map((c) => [c.id, c.citation]))
+  // earlier questions stay in the list as one-line history rows
+  if (!selected) {
+    return (
+      <button
+        type="button"
+        data-testid="run-card"
+        data-collapsed="true"
+        onClick={onSelect}
+        className="flex w-full items-center gap-3 rounded-lg border border-line bg-white px-4 py-2.5 text-left hover:border-accent"
+      >
+        <span className="min-w-0 flex-1 truncate text-sm" data-testid="run-question">
+          {run.question}
+        </span>
+        <span className="shrink-0 text-xs text-ink-soft">{timeOf(run.created_at)}</span>
+        <StateBadge state={run.state} compact />
+      </button>
+    )
+  }
+
   const claimById = new Map(run.claims.map((c) => [c.id, c]))
   const conflicts = run.aspects.filter((a) => a.status === 'conflict')
-  const hasAnswer = run.answer.length > 0
 
   return (
-    <article
-      onClick={onSelect}
-      data-testid="run-card"
-      className={`cursor-pointer rounded border bg-white p-4 ${selected ? 'border-slate-900' : 'border-slate-200'}`}
-    >
-      <p className="text-xs uppercase tracking-wide text-slate-500">Question</p>
-      <h3 className="font-medium">{run.question}</h3>
-      <div className="mt-2 flex flex-wrap items-center gap-2">
+    <article data-testid="run-card" className="rounded-lg border border-slate-300 bg-white p-5 shadow-sm">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <h3 className="min-w-0 flex-1 text-base font-semibold" data-testid="run-question">
+          {run.question}
+        </h3>
         <StateBadge state={run.state} />
-        {run.degraded && (
-          <span data-testid="degraded" className="rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-900">
-            Evidence only
-          </span>
-        )}
-        {run.cached && (
-          <span data-testid="cached" className="text-xs text-slate-500">
-            Served from cache
-          </span>
-        )}
       </div>
+      <p className="mt-1 text-xs text-ink-soft">
+        {STATES[run.state].meaning}
+        {run.cached && <span data-testid="cached"> Answered earlier; shown from this investigation's history.</span>}
+      </p>
 
-      {run.state === 'CONFLICT' && (
-        <div data-testid="conflict" className="mt-3 rounded border border-red-300 bg-red-50 p-3 text-sm">
-          <p className="font-medium text-red-900">{run.headline}</p>
-          {conflicts.map((aspect) => (
-            <div key={aspect.id} className="mt-2">
-              <p className="text-xs uppercase tracking-wide text-red-800">{aspect.label}</p>
-              <ul className="mt-1 space-y-1">
-                {aspect.positions.map((position) => (
-                  <li key={position.key} data-testid="position" className="rounded bg-white p-2">
-                    <span className="font-semibold">{position.display}</span>
-                    <span className="text-xs text-slate-500">
-                      {' '}
-                      · {position.document_ids.length} document{position.document_ids.length === 1 ? '' : 's'}
-                    </span>
-                    <div className="mt-1 flex flex-wrap gap-1">
-                      {position.claim_ids.map((claimId) => {
-                        const claim = claimById.get(claimId)
-                        if (!claim) return null
-                        return (
-                          <button
-                            key={claimId}
-                            type="button"
-                            data-testid="position-source"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              onSelect()
-                              onSelectClaim(claimId)
-                            }}
-                            className={`rounded border px-1.5 py-0.5 text-xs ${
-                              selected && selectedClaimId === claimId
-                                ? 'border-slate-900 bg-slate-900 text-white'
-                                : 'border-slate-300 bg-slate-50'
-                            }`}
-                          >
-                            {claim.evidence.document}
-                            {claim.evidence.page != null && ` · p.${claim.evidence.page}`}
-                          </button>
-                        )
-                      })}
-                    </div>
-                  </li>
-                ))}
-              </ul>
-              {aspect.notes.map((note, i) => (
-                <p key={i} data-testid="supersession-note" className="mt-2 text-xs text-slate-700">
-                  Note: {note.text} “{note.evidence.quote}”
-                  {note.evidence.page != null && ` (page ${note.evidence.page})`}. Both positions are still shown
-                  so you can decide.
-                </p>
-              ))}
-            </div>
-          ))}
-        </div>
-      )}
-
-      {!hasAnswer && (
-        <p data-testid="no-answer" className="mt-3 rounded bg-slate-100 p-2 text-sm text-slate-700">
-          {run.headline}
+      {run.degraded && (
+        <p data-testid="degraded" className="mt-4 flex gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+          <TriangleAlert size={16} className="mt-0.5 shrink-0" aria-hidden />
+          {EVIDENCE_ONLY}
         </p>
       )}
 
-      {hasAnswer && (
-        <div className="mt-3 space-y-1 text-sm" data-testid="answer">
+      {run.state === 'INSUFFICIENT' && (
+        <p data-testid="no-answer" className="mt-4 rounded-md bg-slate-100 p-3 font-serif text-lg text-slate-800">
+          {NO_ANSWER}
+        </p>
+      )}
+
+      {conflicts.map((aspect) => (
+        <ContradictionMap
+          key={aspect.id}
+          aspect={aspect}
+          claims={claimById}
+          selectedClaimId={selectedClaimId}
+          onSelectClaim={onSelectClaim}
+        />
+      ))}
+
+      {run.answer.length > 0 && (
+        <div className="mt-4 space-y-2 font-serif text-lg leading-relaxed" data-testid="answer">
           {run.answer.map((sentence, i) => (
             <p key={i}>
               {sentence.text}{' '}
@@ -108,16 +85,13 @@ export function RunCard({ run, selected, selectedClaimId, onSelect, onSelectClai
                   key={claimId}
                   type="button"
                   data-testid="citation"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    onSelect()
-                    onSelectClaim(claimId)
-                  }}
-                  className={`mx-0.5 rounded px-1.5 text-xs font-semibold ${
-                    selected && selectedClaimId === claimId ? 'bg-slate-900 text-white' : 'bg-blue-100 text-blue-900'
+                  title="Show the verified evidence"
+                  onClick={() => onSelectClaim(claimId)}
+                  className={`mx-0.5 inline-flex h-5 min-w-5 items-center justify-center rounded px-1 align-middle font-sans text-xs font-semibold transition-colors ${
+                    selectedClaimId === claimId ? 'bg-ink text-white' : 'bg-blue-100 text-accent hover:bg-blue-200'
                   }`}
                 >
-                  {citation.get(claimId)}
+                  {claimById.get(claimId)?.citation}
                 </button>
               ))}
             </p>
@@ -125,19 +99,17 @@ export function RunCard({ run, selected, selectedClaimId, onSelect, onSelectClai
         </div>
       )}
 
-      {run.reasons.length > 0 && (
-        <ul data-testid="reasons" className="mt-3 list-disc space-y-0.5 pl-5 text-xs text-slate-600">
-          {run.reasons.map((reason, i) => (
-            <li key={i}>{reason}</li>
+      {run.warnings.length > 0 && (
+        <ul data-testid="warnings" className="mt-3 space-y-1">
+          {run.warnings.map((warning, i) => (
+            <li key={i} className="flex items-center gap-1.5 text-xs text-amber-800">
+              <TriangleAlert size={12} aria-hidden /> {warning}
+            </li>
           ))}
         </ul>
       )}
 
-      {run.warnings.map((warning, i) => (
-        <p key={i} className="mt-2 text-xs text-amber-800">
-          {warning}
-        </p>
-      ))}
+      <WhyThisAnswer run={run} />
     </article>
   )
 }

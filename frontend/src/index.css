@@ -1,1 +1,43 @@
 @import "tailwindcss";
+
+/* A case-file look: cool paper, dark ink, and a highlighter for verified quotes. System fonts only,
+   so the workspace renders the same with no network. */
+@theme {
+  --color-paper: #f5f6f8;
+  --color-ink: #14213d;
+  --color-ink-soft: #4a5672;
+  --color-line: #dde1e8;
+  --color-accent: #2747d4;
+  --color-marker: #ffe98a;
+
+  --font-sans: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  --font-serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+}
+
+body {
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+}
+
+/* a quote that was checked against the stored document text, shown as highlighter on paper */
+.verified-quote {
+  font-family: var(--font-serif);
+  line-height: 1.6;
+  background: linear-gradient(transparent 12%, var(--color-marker) 12%, var(--color-marker) 88%, transparent 88%);
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  padding: 0 0.15em;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation: none !important;
+    scroll-behavior: auto !important;
+  }
+}
