@@ -13,7 +13,7 @@ from ..config import settings
 from ..llm import LLMBadOutput, LLMUnavailable
 from ..logging_utils import log_stage
 from ..retrieval import retriever
-from . import analyst, composer, verifier
+from . import analyst, composer, conflicts, verifier
 
 
 def _cache_key(question: str, document_hashes: list[str]) -> str:
@@ -59,7 +59,18 @@ def run_investigation(investigation_id: str, question: str, fresh: bool = False,
             reasons = ",".join(sorted({d["reason"] for d in dropped})) or None
             log_stage("verify", run=run_id, verified=len(verification["claims"]), dropped=len(dropped), reasons=reasons)
 
-            body = composer.compose(output, verification, evidence)
+            conflict_check_failed = False
+            try:
+                aspects = conflicts.detect(output.aspects, verification["claims"], evidence, verification["notes"])
+            except Exception as exc:  # the answer is still returned, without conflict analysis
+                conflict_check_failed = True
+                aspects = conflicts.fallback(output.aspects, verification["claims"])
+                log_stage("conflict", level="WARN", run=run_id, error=f"{type(exc).__name__}: {exc}"[:200])
+            log_stage("conflict", run=run_id, aspects=len(aspects),
+                      conflicting=sum(a["status"] == "conflict" for a in aspects),
+                      positions=sum(len(a["positions"]) for a in aspects))
+
+            body = composer.compose(output, verification, evidence, aspects, conflict_check_failed)
         except (LLMUnavailable, LLMBadOutput) as exc:
             degraded = True
             log_stage("analyse", level="WARN", run=run_id, error=type(exc).__name__, detail=str(exc)[:200])

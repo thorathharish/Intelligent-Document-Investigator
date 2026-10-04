@@ -17,6 +17,7 @@ TYPED = {"duration", "date", "money", "percent", "number", "boolean"}
 
 _CHAR_MAP = {"‘": "'", "’": "'", "“": '"', "”": '"', "–": "-", "—": "-", "‑": "-", "−": "-"}
 _ELLIPSIS = re.compile(r"\.{3,}|…")
+_SUPERSESSION_CUE = re.compile(r"\b(replac|amend|supersed|overrid)\w*", re.I)
 _EDGE = " \t\n\"'.…"
 
 
@@ -136,17 +137,50 @@ def verify(output: AnalystOutput, evidence: list[dict]) -> dict:
                 "position_key": position_key,
                 "scope": normalize_scope(claim.scope),
                 "explicit": explicit,
-                "evidence": {
-                    "chunk_id": item["chunk_id"],
-                    "document_id": item["document_id"],
-                    "document": item["document"],
-                    "page": item["page"],
-                    "section": item["section"],
-                    "paragraph": item["paragraph"],
-                    "quote": shown_quote,
-                    "extraction_method": item["extraction_method"],
-                    "ocr_quality": _ocr_quality(item),
-                },
+                "evidence": _evidence(item, shown_quote),
             }
         )
-    return {"claims": verified, "dropped": dropped}
+    return {"claims": verified, "dropped": dropped, "notes": _verify_supersession(output, by_eid)}
+
+
+def _evidence(item: dict, quote: str) -> dict:
+    return {
+        "chunk_id": item["chunk_id"],
+        "document_id": item["document_id"],
+        "document": item["document"],
+        "page": item["page"],
+        "section": item["section"],
+        "paragraph": item["paragraph"],
+        "quote": quote,
+        "extraction_method": item["extraction_method"],
+        "ocr_quality": _ocr_quality(item),
+    }
+
+
+def _verify_supersession(output: AnalystOutput, by_eid: dict[str, dict]) -> list[dict]:
+    """Supersession notes pass the same evidence and quote checks as claims; failures are discarded.
+
+    The quote itself must say that it replaces, amends, overrides or supersedes something. The note
+    text is written here from the database document name, not taken from the model.
+    """
+    notes, seen = [], set()
+    for entry in output.supersession:
+        item = by_eid.get(entry.evidence)
+        quote = entry.quote.strip()
+        if item is None or not MIN_QUOTE_CHARS <= len(quote) <= MAX_QUOTE_CHARS:
+            continue
+        found = find_quote(quote, item["text"], item["extraction_method"] == "ocr")
+        if found is None:
+            continue
+        shown_quote = item["text"][found[0] : found[1]]
+        if not _SUPERSESSION_CUE.search(shown_quote) or (item["chunk_id"], entry.aspect) in seen:
+            continue
+        seen.add((item["chunk_id"], entry.aspect))
+        notes.append(
+            {
+                "aspect_id": entry.aspect,
+                "text": f'{item["document"]} states that it replaces or amends an earlier provision.',
+                "evidence": _evidence(item, shown_quote),
+            }
+        )
+    return notes

@@ -18,15 +18,21 @@ _BLOCK = re.compile(r'<evidence id="(E\d+)"[^>]*>\n(.*?)\n</evidence>', re.S)
 class ScriptedLLM:
     """Plays the analyst: for each scripted fact, cites every evidence passage that contains the quote."""
 
-    def __init__(self, facts, extra_claims=()):
+    def __init__(self, facts, extra_claims=(), supersession_quote=None):
         self.facts, self.extra_claims, self.calls = facts, list(extra_claims), 0
+        self.supersession_quote = supersession_quote
 
     def complete_json(self, system, user, validate):
         self.calls += 1
-        aspects, claims, answer = [], [], []
+        aspects, claims, answer, supersession = [], [], [], []
+        for eid, text in _BLOCK.findall(user):
+            if self.supersession_quote and self.supersession_quote in text:
+                supersession.append({"evidence": eid, "quote": self.supersession_quote, "aspect": "A1", "note": "x"})
         for label, quote, value, value_type in self.facts:
-            aspect_id = f"A{len(aspects) + 1}"
-            aspects.append({"id": aspect_id, "label": label})
+            existing = next((a for a in aspects if a["label"] == label), None)
+            aspect_id = existing["id"] if existing else f"A{len(aspects) + 1}"
+            if not existing:
+                aspects.append({"id": aspect_id, "label": label})
             for eid, text in _BLOCK.findall(user):
                 if quote in text:
                     claim_id = f"C{len(claims) + 1}"
@@ -36,7 +42,8 @@ class ScriptedLLM:
         for extra in self.extra_claims:
             claims.append(extra)
             answer.append({"text": "An unsupported statement.", "claims": [extra["id"]]})
-        data = {"aspects": aspects, "claims": claims, "answer": answer, "ambiguous": False}
+        data = {"aspects": aspects, "claims": claims, "answer": answer, "ambiguous": False,
+                "supersession": supersession}
         return LLMResult(value=validate(data), model="scripted", latency_ms=1, from_recording=False)
 
 
@@ -111,6 +118,71 @@ def test_cross_document_question_cites_both_documents(client, inv, monkeypatch):
     assert result["signals"]["documents_cited"] == 2 and len(result["answer"]) == 2
     assert len(result["aspects"]) == 2 and all(a["status"] == "consistent" for a in result["aspects"])
     _assert_grounded(result)
+
+
+def test_payment_terms_conflict_shows_both_positions_and_no_winner(client, inv, monkeypatch):
+    llm = ScriptedLLM([
+        ("Payment period", "within thirty (30) days of the invoice date", "30 days", "duration"),
+        ("Payment period", "within 30 days of the invoice date", "30 days", "duration"),
+        ("Payment period", "Payment due within 45 days of the invoice date", "45 days", "duration"),
+    ])
+    result = _ask(client, inv, "What are the payment terms?", llm, monkeypatch)
+
+    assert result["state"] == "CONFLICT" and result["headline"] == "The documents disagree on payment period."
+    (aspect,) = result["aspects"]
+    assert aspect["status"] == "conflict" and aspect["notes"] == []
+    names = {c["id"]: c["evidence"]["document"] for c in result["claims"]}
+    positions = {p["display"]: sorted(names[cid] for cid in p["claim_ids"]) for p in aspect["positions"]}
+    assert positions == {
+        "30 days": ["Amendment_1.pdf", "Master_Services_Agreement.pdf"],
+        "45 days": ["Invoice_INV-2041.pdf"],
+    }
+    # the answer states each side with its documents and prefers neither
+    assert [s["text"] for s in result["answer"]] == [
+        "Master_Services_Agreement.pdf and Amendment_1.pdf state 30 days.",
+        "Invoice_INV-2041.pdf states 45 days.",
+    ]
+    assert result["signals"]["conflicting_aspects"] == 1 and result["signals"]["documents_cited"] == 3
+    _assert_grounded(result)
+
+
+def test_termination_notice_conflict_keeps_the_cited_supersession_note(client, inv, monkeypatch):
+    llm = ScriptedLLM(
+        [("Termination notice", "giving 60 days' written notice", "60 days", "duration"),
+         ("Termination notice", "giving 90 days' written notice", "90 days", "duration")],
+        supersession_quote="This Amendment replaces clause 9.1 of the Agreement",
+    )
+    result = _ask(client, inv, "How much notice is needed to terminate the agreement?", llm, monkeypatch)
+
+    assert result["state"] == "CONFLICT"
+    (aspect,) = result["aspects"]
+    assert {p["display"] for p in aspect["positions"]} == {"60 days", "90 days"}
+    (note,) = aspect["notes"]
+    assert note["evidence"]["document"] == "Amendment_1.pdf" and "replaces clause 9.1" in note["evidence"]["quote"]
+    assert note["text"].startswith("Amendment_1.pdf states that it replaces")
+    assert len(result["answer"]) == 2  # both sides are still stated
+    _assert_grounded(result)
+
+
+def test_agreeing_documents_are_one_position_without_conflict(client, inv, monkeypatch):
+    llm = ScriptedLLM([("Late fee", "late fee of 1.5% per month", "1.5%", "percent")])
+    result = _ask(client, inv, "What is the late payment fee?", llm, monkeypatch)
+    (aspect,) = result["aspects"]
+    assert result["state"] == "MEDIUM" and aspect["status"] == "consistent"
+    assert len(aspect["positions"]) == 1 and len(aspect["positions"][0]["document_ids"]) == 2
+
+
+def test_conflict_engine_failure_still_returns_the_answer(client, inv, monkeypatch):
+    from app.investigation import conflicts
+
+    def broken(*args, **kwargs):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(conflicts, "detect", broken)
+    llm = ScriptedLLM([("Late fee", "late fee of 1.5% per month", "1.5%", "percent")])
+    result = _ask(client, inv, "What is the late payment fee?", llm, monkeypatch)
+    assert result["state"] == "MEDIUM" and len(result["claims"]) == 2
+    assert "The conflict check could not be completed." in result["warnings"]
 
 
 def test_a5_missing_information_is_not_answered(client, inv, monkeypatch):

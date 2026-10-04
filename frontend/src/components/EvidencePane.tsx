@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import type { Evidence, RunResult } from '../api/types'
+import type { Claim, Evidence, RunResult } from '../api/types'
 
 function location(evidence: Evidence): string {
   const parts = []
@@ -46,25 +46,52 @@ function EvidenceCard({ evidence, number, active }: { evidence: Evidence; number
   )
 }
 
+// When positions conflict, evidence is grouped by position so each side is read together.
+function groupClaims(run: RunResult): { title: string | null; claims: Claim[] }[] {
+  if (run.claims.length === 0) return []
+  const conflicts = run.aspects.filter((a) => a.status === 'conflict')
+  if (conflicts.length === 0) return [{ title: null, claims: run.claims }]
+
+  const byId = new Map(run.claims.map((c) => [c.id, c]))
+  const used = new Set<string>()
+  const groups: { title: string | null; claims: Claim[] }[] = []
+  for (const aspect of conflicts) {
+    for (const position of aspect.positions) {
+      const claims = position.claim_ids.map((id) => byId.get(id)).filter((c): c is Claim => !!c)
+      claims.forEach((c) => used.add(c.id))
+      groups.push({ title: `${aspect.label}: ${position.display}`, claims })
+    }
+  }
+  const rest = run.claims.filter((c) => !used.has(c.id))
+  if (rest.length > 0) groups.push({ title: 'Other evidence', claims: rest })
+  return groups
+}
+
 export function EvidencePane({ run, selectedClaimId }: { run: RunResult | null; selectedClaimId: string | null }) {
+  const groups = run ? groupClaims(run) : []
   return (
     <section className="flex h-full flex-col">
       <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Evidence</h2>
       {!run && <p className="mt-2 text-sm text-slate-500">Ask a question to see its supporting passages.</p>}
       {run && (
         <div className="mt-2 flex-1 overflow-y-auto">
-          {run.claims.length > 0 && (
-            <ul className="space-y-2">
-              {run.claims.map((claim) => (
-                <EvidenceCard
-                  key={claim.id}
-                  evidence={claim.evidence}
-                  number={claim.citation}
-                  active={claim.id === selectedClaimId}
-                />
-              ))}
-            </ul>
-          )}
+          {groups.map((group) => (
+            <div key={group.title ?? 'all'} className="mb-3" data-testid="evidence-group">
+              {group.title && (
+                <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-600">{group.title}</p>
+              )}
+              <ul className="space-y-2">
+                {group.claims.map((claim) => (
+                  <EvidenceCard
+                    key={claim.id}
+                    evidence={claim.evidence}
+                    number={claim.citation}
+                    active={claim.id === selectedClaimId}
+                  />
+                ))}
+              </ul>
+            </div>
+          ))}
           {run.claims.length === 0 && run.related.length > 0 && (
             <>
               <p className="mb-2 text-xs text-slate-500">Related passages. They do not answer the question.</p>

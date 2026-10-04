@@ -1,7 +1,7 @@
 """Answer composition in code, from verified claims only (LLD section 15).
 
-Checkpoint 3 version: the state is provisional (INSUFFICIENT or MEDIUM). Conflict positions, the full
-uncertainty rules and reason templates arrive in Checkpoints 4 and 5.
+The state is CONFLICT when the conflict engine finds one, otherwise provisional (INSUFFICIENT or MEDIUM).
+The full uncertainty rules and reason templates arrive in Checkpoint 5.
 """
 from ..ingestion.ocr import OCR_LOW_THRESHOLD
 from ..schemas import AnalystOutput
@@ -52,17 +52,43 @@ def _signals(evidence: list[dict], extracted: int, claims: list[dict], dropped: 
     }
 
 
-def compose(output: AnalystOutput, verification: dict, evidence: list[dict]) -> dict:
+def _join(names: list[str]) -> str:
+    return names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1]
+
+
+def compose(
+    output: AnalystOutput,
+    verification: dict,
+    evidence: list[dict],
+    aspects: list[dict],
+    conflict_check_failed: bool = False,
+) -> dict:
     """Build the answer part of the investigation result from verified claims."""
     claims = verification["claims"]
     verified_ids = {c["id"] for c in claims}
+    by_id = {c["id"]: c for c in claims}
+    conflicting = [a for a in aspects if a["status"] == "conflict"]
+    conflict_aspect_ids = {a["id"] for a in conflicting}
 
-    # keep a draft sentence only if it cites at least one claim and every cited claim was verified
+    # conflicts: one generated sentence per position, naming its documents; no side is preferred
     sentences = []
+    for aspect in conflicting:
+        for position in aspect["positions"]:
+            names = list(dict.fromkeys(by_id[cid]["evidence"]["document"] for cid in position["claim_ids"]))
+            verb = "states" if len(names) == 1 else "state"
+            sentences.append(
+                {"text": f'{_join(names)} {verb} {position["display"]}.', "claim_ids": list(position["claim_ids"])}
+            )
+
+    # keep a draft sentence only if it cites at least one claim and every cited claim was verified;
+    # draft sentences about a conflicting aspect are replaced by the generated ones above
     for sentence in output.answer:
         text = sentence.text.strip()[:MAX_SENTENCE_CHARS]
-        if text and sentence.claims and all(c in verified_ids for c in sentence.claims):
-            sentences.append({"text": text, "claim_ids": list(dict.fromkeys(sentence.claims))})
+        if not (text and sentence.claims and all(c in verified_ids for c in sentence.claims)):
+            continue
+        if any(by_id[c]["aspect_id"] in conflict_aspect_ids for c in sentence.claims):
+            continue
+        sentences.append({"text": text, "claim_ids": list(dict.fromkeys(sentence.claims))})
 
     if claims and not sentences:
         for claim in claims:
@@ -77,24 +103,13 @@ def compose(output: AnalystOutput, verification: dict, evidence: list[dict]) -> 
         claim["citation"] = numbers[claim["id"]]
     claims.sort(key=lambda c: c["citation"])
 
-    aspects = []
-    for aspect in output.aspects:
-        covered = any(c["aspect_id"] == aspect.id for c in claims)
-        aspects.append(
-            {
-                "id": aspect.id,
-                "label": aspect.label,
-                "status": "consistent" if covered else "uncovered",
-                "basis": "typed",
-                "positions": [],
-                "notes": [],
-            }
-        )
-
     signals = _signals(evidence, len(output.claims), claims, len(verification["dropped"]), aspects, output.ambiguous)
+    signals["conflicting_aspects"] = len(conflicting)
     warnings = []
     if signals["ocr_claims"]:
         warnings.append(f'{signals["ocr_claims"]} passage(s) come from scanned images.')
+    if conflict_check_failed:
+        warnings.append("The conflict check could not be completed.")
 
     if not claims:
         return {
@@ -118,9 +133,15 @@ def compose(output: AnalystOutput, verification: dict, evidence: list[dict]) -> 
             f'{signals["claims_dropped"]} extracted statement(s) were discarded because their quote could not '
             "be found in the source."
         )
+    if conflicting:
+        labels = [a["label"][:1].lower() + a["label"][1:] for a in conflicting]
+        state, headline = "CONFLICT", f"The documents disagree on {_join(labels)}."
+    else:
+        # provisional until the uncertainty engine (Checkpoint 5)
+        state, headline = "MEDIUM", sentences[0]["text"]
     return {
-        "state": "MEDIUM",  # provisional until the uncertainty engine (Checkpoint 5)
-        "headline": sentences[0]["text"],
+        "state": state,
+        "headline": headline,
         "answer": sentences,
         "aspects": aspects,
         "claims": claims,
