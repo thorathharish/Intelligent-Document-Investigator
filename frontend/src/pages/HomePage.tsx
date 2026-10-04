@@ -45,8 +45,8 @@ const PREVIEW_EVIDENCE = [
 
 function PositionBox({ value, sources }: { value: string; sources: string[] }) {
   return (
-    <div className="flex-1 rounded-lg border-2 border-red-200 bg-white p-3">
-      <p className="font-serif text-3xl leading-none">{value}</p>
+    <div className="min-w-0 flex-1 rounded-lg border-2 border-red-200 bg-white p-2.5 sm:p-3">
+      <p className="font-serif text-2xl leading-none sm:text-3xl">{value}</p>
       <ul className="mt-2 space-y-0.5 text-sm text-ink-soft">
         {sources.map((source) => (
           <li key={source}>{source}</li>
@@ -60,7 +60,7 @@ function Conflict() {
   return (
     <div className="flex items-stretch gap-2">
       <PositionBox value="30 days" sources={['Master Services Agreement', 'Amendment 1']} />
-      <div className="flex items-center font-serif text-3xl font-semibold text-red-700" aria-label="conflicts with">
+      <div className="flex shrink-0 items-center font-serif text-2xl font-semibold text-red-700 sm:text-3xl" aria-label="conflicts with">
         ≠
       </div>
       <PositionBox value="45 days" sources={['Invoice INV-2041']} />
@@ -82,18 +82,20 @@ export function HomePage() {
 
   const primary =
     'rounded-lg bg-ink px-5 py-3 text-sm font-semibold text-white hover:bg-accent disabled:opacity-50 transition-colors'
+  // every section shares this container, so their left and right edges line up at any width
+  const container = 'mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8'
   const secondary =
     'rounded-lg border border-slate-400 bg-white px-5 py-3 text-sm font-semibold hover:border-accent disabled:opacity-50 transition-colors'
 
   return (
     <div className="min-h-screen bg-paper">
       <header className="border-b border-line bg-white">
-        <nav className="mx-auto flex max-w-6xl items-center justify-between px-6 py-3" aria-label="Main">
-          <p className="flex items-center gap-2 font-semibold">
-            <FileCheck size={18} className="text-accent" aria-hidden />
+        <nav className={`${container} flex items-center justify-between gap-3 py-3`} aria-label="Main">
+          <p className="flex items-center gap-2 whitespace-nowrap text-lg font-bold leading-none tracking-tight sm:text-xl">
+            <FileCheck size={22} className="shrink-0 text-accent" aria-hidden />
             Document Investigator
           </p>
-          <button type="button" onClick={start} disabled={busy} className="text-sm font-semibold text-accent hover:underline">
+          <button type="button" onClick={start} disabled={busy} className="shrink-0 text-sm font-semibold text-accent hover:underline">
             Start investigating
           </button>
         </nav>
@@ -101,14 +103,14 @@ export function HomePage() {
 
       <main>
         {/* hero */}
-        <section className="mx-auto grid max-w-6xl items-center gap-10 px-6 py-14 lg:grid-cols-[1.05fr_1fr]">
-          <div>
-            <h1 className="font-serif text-6xl leading-[1.05]">Answers you can verify.</h1>
-            <p className="mt-5 max-w-xl text-lg leading-relaxed text-ink-soft">
+        <section className={`${container} grid items-center gap-8 py-10 sm:py-14 lg:grid-cols-[1.05fr_1fr] lg:gap-10`}>
+          <div className="min-w-0">
+            <h1 className="font-serif text-4xl leading-[1.08] sm:text-5xl xl:text-6xl">Answers you can verify.</h1>
+            <p className="mt-4 max-w-xl text-base leading-relaxed text-ink-soft sm:mt-5 sm:text-lg">
               Investigate scattered documents with evidence-backed answers, conflict detection, and clear
               uncertainty.
             </p>
-            <div className="mt-8 flex flex-wrap gap-3">
+            <div className="mt-6 flex flex-wrap gap-3 sm:mt-8">
               <button type="button" data-testid="start" onClick={start} disabled={busy} className={primary}>
                 {create.isPending ? 'Opening…' : 'Start investigating'}
               </button>
@@ -127,17 +129,17 @@ export function HomePage() {
             )}
           </div>
 
-          <figure className="rounded-xl border border-t-4 border-slate-300 border-t-red-600 bg-white p-6 shadow-sm">
+          <figure className="min-w-0 rounded-xl border border-t-4 border-slate-300 border-t-red-600 bg-white p-4 shadow-sm sm:p-6">
             <p className="text-xs font-semibold text-ink-soft">Question</p>
             <p className="mt-0.5 text-lg font-semibold">What payment terms apply?</p>
             <div className="mt-3">
               <StateBadge state="CONFLICT" />
             </div>
-            <p className="mt-4 font-serif text-xl text-red-900">Evidence disagrees on the payment period</p>
+            <p className="mt-4 font-serif text-lg text-red-900 sm:text-xl">Evidence disagrees on the payment period</p>
             <div className="mt-3">
               <Conflict />
             </div>
-            <p className="mt-4 flex items-center gap-1.5 border-t border-line pt-3 text-sm">
+            <p className="mt-4 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 border-t border-line pt-3 text-sm">
               <BadgeCheck size={15} className="text-emerald-700" aria-hidden />
               <span className="font-semibold">Verified evidence</span>
               <span className="text-ink-soft">3 source passages verified. No side chosen.</span>
@@ -150,8 +152,8 @@ export function HomePage() {
 
         {/* differentiators */}
         <section className="border-y border-line bg-white" aria-labelledby="different">
-          <div className="mx-auto max-w-6xl px-6 py-12">
-            <h2 id="different" className="font-serif text-3xl">
+          <div className={`${container} py-10 sm:py-12`}>
+            <h2 id="different" className="font-serif text-2xl sm:text-3xl">
               It investigates. It does not just answer.
             </h2>
             <div className="mt-6 grid gap-4 md:grid-cols-3">
@@ -167,8 +169,8 @@ export function HomePage() {
         </section>
 
         {/* how it works */}
-        <section className="mx-auto max-w-6xl px-6 py-12" aria-labelledby="how">
-          <h2 id="how" className="font-serif text-3xl">
+        <section className={`${container} py-10 sm:py-12`} aria-labelledby="how">
+          <h2 id="how" className="font-serif text-2xl sm:text-3xl">
             How it works
           </h2>
           <ol className="mt-6 grid gap-x-6 gap-y-5 sm:grid-cols-2 lg:grid-cols-4">
@@ -184,8 +186,8 @@ export function HomePage() {
 
         {/* product preview */}
         <section className="border-y border-line bg-white" aria-labelledby="preview">
-          <div className="mx-auto max-w-6xl px-6 py-12">
-            <h2 id="preview" className="font-serif text-3xl">
+          <div className={`${container} py-10 sm:py-12`}>
+            <h2 id="preview" className="font-serif text-2xl sm:text-3xl">
               From question to evidence
             </h2>
             <p className="mt-2 max-w-2xl text-sm text-ink-soft">
@@ -193,7 +195,7 @@ export function HomePage() {
               side by side, so you can check every step.
             </p>
             <div className="mt-6 grid gap-4 lg:grid-cols-[1.15fr_1fr]">
-              <div className="rounded-lg border border-line bg-paper p-5">
+              <div className="min-w-0 rounded-lg border border-line bg-paper p-4 sm:p-5">
                 <p className="text-xs font-semibold text-ink-soft">Question</p>
                 <p className="mt-0.5 font-semibold">What payment terms apply?</p>
                 <p className="mt-4 text-xs font-semibold text-ink-soft">Answer</p>
@@ -207,7 +209,7 @@ export function HomePage() {
                   <Conflict />
                 </div>
               </div>
-              <div className="rounded-lg border border-line bg-paper p-5">
+              <div className="min-w-0 rounded-lg border border-line bg-paper p-4 sm:p-5">
                 <p className="flex items-center gap-1.5 text-sm font-semibold">
                   <BadgeCheck size={16} className="text-emerald-700" aria-hidden />
                   Verified evidence
@@ -234,8 +236,8 @@ export function HomePage() {
         </section>
 
         {/* demo call to action */}
-        <section className="mx-auto max-w-6xl px-6 py-14 text-center" aria-labelledby="try">
-          <h2 id="try" className="font-serif text-4xl">
+        <section className={`${container} py-12 text-center sm:py-14`} aria-labelledby="try">
+          <h2 id="try" className="font-serif text-3xl sm:text-4xl">
             See the investigation for yourself.
           </h2>
           <p className="mx-auto mt-3 max-w-xl text-ink-soft">
@@ -256,7 +258,7 @@ export function HomePage() {
       </main>
 
       <footer className="border-t border-line bg-white">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-2 px-6 py-5 text-sm">
+        <div className={`${container} flex flex-wrap items-center justify-between gap-2 py-5 text-sm`}>
           <p className="font-semibold">Document Investigator</p>
           <p className="text-ink-soft">Evidence-backed document investigation.</p>
         </div>
