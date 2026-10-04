@@ -104,13 +104,15 @@ python scripts\acceptance.py                     # needs the backend running
 
 The backend and frontend are hosted separately.
 
-**Backend (Render).** `render.yaml` describes the service.
+**Backend (Oracle Cloud Always Free VM).** `deploy/oracle/` holds the setup script, the systemd service,
+the Nginx site and step-by-step instructions (`deploy/oracle/README.md`).
 
-- Build: `pip install -r backend/requirements.txt`, then swap `opencv-python` for `opencv-python-headless`
-- Start: `uvicorn app.main:app --app-dir backend --host 0.0.0.0 --port $PORT`
+- Runs as: systemd → Uvicorn (one worker) → FastAPI, behind Nginx on port 80
+- Start: `uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8000 --workers 1`
 - Health check: `/api/health`
-- Environment: `PYTHON_VERSION=3.11.9`, `OPENROUTER_API_KEY`, `OPENROUTER_MODEL`,
-  `OPENROUTER_FALLBACK_MODELS`, `LLM_MODE=live`, and `ALLOWED_ORIGINS` set to the frontend's origin
+- Environment (in `/etc/document-investigator.env`): `OPENROUTER_API_KEY`, `OPENROUTER_MODEL`,
+  `OPENROUTER_FALLBACK_MODELS`, `LLM_MODE=live`, `DATA_DIR`, and `ALLOWED_ORIGINS` set to the
+  frontend's origin
 
 **Frontend (Vercel).** Root directory `frontend`, build `npm run build`, output `dist`.
 
